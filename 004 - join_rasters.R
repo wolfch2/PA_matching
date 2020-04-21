@@ -14,17 +14,10 @@ require(rnaturalearth)
 rasterOptions(maxmemory = 1e+09) # want to handle all cells of 1-km global rasters in memory
 rasterOptions(chunksize = 1e+09)
 
-project_dir = "/home/chrisgraywolf/analysis_desktop/PA_matching/"
+project_dir = "/home/chrisgraywolf/shared/analysis/PA_matching/"
 setwd(project_dir)
 
-######################################## topography
-
-gdalwarp(srcfile="data_input/elev.tif",
-         dstfile="data_input/elev.vrt",
-         t_srs="+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +datum=WGS84 +ellps=WGS84 +units=m +no_defs",
-         tr=c(1000,1000),
-         of="VRT")
-gdal_translate("data_input/elev.vrt","data_processed/rasters/elev.tif",of="GTiff",co="COMPRESS=LZW")
+######################################## topography (slope)
 
 elev = raster("data_processed/rasters/elev.tif")
 slope = terrain(elev)
@@ -45,12 +38,45 @@ gdalwarp(srcfile="data_processed/non-threatened.tif",
          t_srs="+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +datum=WGS84 +ellps=WGS84 +units=m +no_defs",
          tr=c(1000,1000),         
          of="VRT")
-gdal_translate("data_processed/non-threatened.vrt","data_processed/rasters/non-threatened.tif",of="GTiff",co="COMPRESS=LZW")
+gdal_translate("data_processed/non-threatened.vrt","data_processed/rasters/non_threatened.tif",of="GTiff",co="COMPRESS=LZW")
 
-######################################## forest and travel time rasters
+######################################## Curtis et al. data (drivers)
 
-for(rast_name in c("cover_loss_v2","cover","gain")){
-        gdalbuildvrt(gdalfile=paste0("data_input/",rast_name,c("-0000000000-0000000000.tif","-0000000000-0000023296.tif")),
+drivers_url = "https://science.sciencemag.org/highwire/filestream/715492/field_highwire_adjunct_files/2/aau3445-Data-S3.tif"
+system(paste0("wget --content-disposition \"", drivers_url, "\" -nc --tries=0 -P ", project_dir, "data_input"))
+
+drivers = raster("data_input/aau3445-Data-S3.tif")
+crs(drivers) = CRS("+proj=igh +towgs84=0,0,0") # pretty sure this should be interupted form (o.w. reprojected version is wrong)
+writeRaster(drivers, "data_input/drivers.tif")
+
+gdalwarp(srcfile="data_input/drivers.tif",
+         dstfile="data_processed/drivers_proj.vrt",
+         t_srs="+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +datum=WGS84 +ellps=WGS84 +units=m +no_defs",
+         tr=c(1000,1000),
+         te=extent(elev)[c(1,3,2,4)],
+         of="VRT")
+
+gdal_translate("data_processed/drivers_proj.vrt",
+               "data_processed/rasters/drivers.tif",of="GTiff",co="COMPRESS=LZW")
+
+######################################## lossyear
+
+gdalwarp(srcfile="data_input/lossyear.tif",
+                 "data_input/lossyear_proj.vrt",
+                 tr=c(1000,1000),
+                 of="VRT",
+                 t_srs="+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +datum=WGS84 +ellps=WGS84 +units=m +no_defs",
+                 te=extent(elev)[c(1,3,2,4)])
+
+gdal_translate("data_input/lossyear_proj.vrt",
+               "data_processed/rasters/lossyear.tif",
+               of="GTiff",
+               co=c("COMPRESS=LZW","BIGTIFF=YES"))
+
+######################################## forest, travel time, HPD, etc.
+
+for(rast_name in c("cover_loss","loss","cover","gain","pop_dens","travel_time","lossyear")){
+        gdalbuildvrt(gdalfile=list.files("data_input",pattern=paste0("^",rast_name,"-.*tif$"),full.names=TRUE),
                output.vrt=paste0("data_input/", rast_name, ".vrt"))
 
         gdalwarp(srcfile=paste0("data_input/", rast_name, ".vrt"),
@@ -60,13 +86,15 @@ for(rast_name in c("cover_loss_v2","cover","gain")){
                  t_srs="+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +datum=WGS84 +ellps=WGS84 +units=m +no_defs",
                  te=extent(elev)[c(1,3,2,4)])
 
-        gdal_translate(paste0("data_input/", rast_name, "_proj.vrt"),paste0("data_processed/rasters/", rast_name, ".tif"),of="GTiff",co=c("COMPRESS=LZW","BIGTIFF=YES"))
+        gdal_translate(paste0("data_input/", rast_name, "_proj.vrt"),paste0("data_processed/rasters/", rast_name, ".tif"),
+                       of="GTiff",
+                       co=c("COMPRESS=LZW","BIGTIFF=YES"))
 }
 
 ######################################## protected areas (dl from WDPA)
 
 PAs = read_sf("data_input/PAs/WDPA_Jan2020-shapefile-polygons.shp")
-PAs$ID = as.numeric(factor(PAs$WDPAID))
+PAs$ID = as.numeric(factor(PAs$WDPAID)) # cannot use WDPAID directly!  see below..
 PAs_proj = st_transform(PAs, "+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +datum=WGS84 +ellps=WGS84 +units=m +no_defs")
 PAs_rast = fasterize(PAs_proj, raster=elev, field="ID") # could prioritize by IUCN_CAT or...
 writeRaster(PAs_rast, "data_processed/rasters/PAs.tif") # WDPAID seems to default to int, but values exceed max allowed (also lose too much precision w/ float..)
@@ -100,141 +128,16 @@ forest_biome = fasterize(eco_regions_proj, elev, "BIOME")
 forest_biome[] = forest_biome[] %in% c(1:6, 14)
 writeRaster(forest_biome, "data_processed/rasters/forest_biome.tif")
 
-######################################## country
+######################################## countries
 
 worldmap = ne_download(scale = 10,
-                                       type = "countries",
-                                       category = "cultural",
-                                       destdir = tempdir(),
-                                       load = TRUE,
-                                       returnclass = "sf")
+                       type = "countries",
+                       category = "cultural",
+                       destdir = tempdir(),
+                       load = TRUE,
+                       returnclass = "sf")
 worldmap$ID = 1:nrow(worldmap)
 worldmap_proj = st_transform(worldmap, "+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +datum=WGS84 +ellps=WGS84 +units=m +no_defs")
 countries_rast = fasterize(worldmap_proj, elev, "ID")
 writeRaster(countries_rast, "data_processed/rasters/countries.tif")
-
-######################################## quick maps
-
-rast_names = c("elev","slope","threatened","non-threatened",
-               "cover","cover_loss","gain","countries",
-               "ecoregions","forest_biome","travel_time","PAs")
-
-for(rast_name in rast_names){
-        print(rast_name)
-        rast = raster(paste0("data_processed/rasters/", rast_name, ".tif"))
-        vel = velox(rast)
-        vel$aggregate(factor=10, aggtype='median')
-        rast = vel$as.RasterLayer()
-
-        if(rast_name == ecoregions){
-                rast[] = as.numeric(factor(round(rast[])))
-        }
-
-        png(paste0("output/input_rasters/", rast_name, ".png"), width=14, height=7, units="in", res=150)
-        print(levelplot(rast, margin=FALSE, main=rast_name, maxpixels = 1e6))
-        dev.off()
-}
-
-
-
-
-
-
-
-
-### NOT RUN
-
-
-
-
-
-
-
-
-
-rast_names = c("elev","slope","threatened","non-threatened",
-               "cover","cover_loss","gain","countries",
-               "ecoregions","forest_biome","travel_time","PAs")
-
-pdf("output/input_rasters.pdf", width=14, height=7)
-for(rast_name in rast_names){
-        print(rast_name)
-        rast = raster(paste0("data_processed/rasters/", rast_name, ".tif"))
-        vel = velox(rast)
-        vel$aggregate(factor=10, aggtype='median')
-        rast = vel$as.RayerLayer()
-
-        
-        print(levelplot(rast, margin=FALSE, main=rast_name, maxpixels = 1e6))
-}
-dev.off()
-
-
-
-
-
-total = raster(paste0("data_processed/rasters/non-threatened.tif")) + raster(paste0("data_processed/rasters/threatened.tif"))
-vel = velox(total)
-vel$aggregate(factor=10, aggtype='median')
-total = vel$as.RasterLayer()
-
-total_pts = data.frame(rasterToPoints(total))
-
-p = ggplot(total_pts, aes(x=x,y=y,fill=layer)) +
-        geom_raster() +
-        coord_fixed() +
-        theme(axis.title=element_blank(),
-              axis.text=element_blank(),
-              axis.ticks=element_blank()) +
-        scale_x_continuous(expand=c(0,0)) +
-        scale_y_continuous(expand=c(0,0)) +
-        scale_fill_gradientn(colors=magma(100))
-
-pdf("output/forest_species.pdf", width=10, height=5)
-print(p)
-dev.off()
-
-
-
-
-
-
-
-
-
-
-pdf("output/input_rasters.tif")
-plot_list = lapply(rast_names, function(rast_name){
-        rast = raster(paste0("data_processed/rasters/", rast_name, ".tif"))
-        plot(rast, main=rast_name)
-}
-dev.off()
-
-
-
-
-
-coverxloss -> annualzied loss
-map grid
-
-try matching
-
-
-
-
-
-
-
-
-for(rast_name in rast_names){
-        print(rast_name)
-        rast = raster(paste0("data_processed/rasters/", rast_name, ".tif"))
-        plot(rast)
-
-
-}
-
-
-
-
 

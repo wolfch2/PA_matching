@@ -7,6 +7,11 @@ require(rgdal)
 require(sf)
 require(foreach)
 require(doMC)
+require(raster)
+require(sf)
+require(fasterize)
+require(rgdal)
+require(gdalUtils)
 
 setwd("/home/chrisgraywolf/analysis_desktop/PA_matching/")
 
@@ -139,4 +144,20 @@ foreach(i=1:8, .packages="sf") %dopar%{
         select = bird_ranges[bird_ranges$id_no %in% id_gps[[i]],]
         write_sf(select, paste0("data_input/range_maps/BIRDS_", i, ".shp"))
 }
+
+######################################################## build elevation raster (for masking ranges etc.)
+
+gdalbuildvrt(gdalfile=list.files("data_input",pattern="elev.*tif$",full.names=TRUE),
+        output.vrt="data_input/elev.vrt")
+
+gdalwarp(srcfile=paste0("data_input/elev.vrt"),
+         dstfile=paste0("data_input/elev_proj.vrt"),
+         tr=c(1000,1000),
+         of="VRT",
+         t_srs="+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +datum=WGS84 +ellps=WGS84 +units=m +no_defs")
+
+gdal_translate("data_input/elev_proj.vrt",
+               "data_processed/rasters/elev.tif",
+               of="GTiff",
+               co=c("COMPRESS=LZW","BIGTIFF=YES"))
 

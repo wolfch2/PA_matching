@@ -10,15 +10,21 @@ ee.Initialize()
 
 scale = 0.008983153 # checked w/ small region export at 1000 m
 
+lossyear = ee.Image("UMD/hansen/global_forest_change_2018_v1_6").select('lossyear')
+lossyear = lossyear.updateMask(lossyear.neq(0)).focal_mode(radius=500, kernelType='square', units='meters') # avoid bias toward 0 from resampling
+
 GEE_rasts = {
-    #'land' = ee.Image("MODIS/MOD44W/MOD44W_005_2000_02_24").select('water_mask').eq(0).rename(['land']).unmask(0),
-    #'gtopo30' = ee.Image('USGS/GTOPO30'),
+    'land':ee.Image("MODIS/MOD44W/MOD44W_005_2000_02_24").select('water_mask').eq(0).unmask(0),
+    'elev':ee.Image('USGS/GTOPO30'),
     'loss':ee.Image("UMD/hansen/global_forest_change_2018_v1_6").select('loss').reduceResolution(reducer=ee.Reducer.mean(), bestEffort=True),
-    'lossyear':ee.Image("UMD/hansen/global_forest_change_2018_v1_6").select('lossyear').reduceResolution(reducer=ee.Reducer.mode(), bestEffort=True),
+    'lossyear':lossyear,
     'gain':ee.Image("UMD/hansen/global_forest_change_2018_v1_6").select('gain').reduceResolution(reducer=ee.Reducer.mean(), bestEffort=True),
     'cover':ee.Image("UMD/hansen/global_forest_change_2018_v1_6").select('treecover2000').reduceResolution(reducer=ee.Reducer.mean(), bestEffort=True),
     'mask':ee.Image("UMD/hansen/global_forest_change_2018_v1_6").select('datamask').reduceResolution(reducer=ee.Reducer.mode(), bestEffort=True),
-    'travel_time':ee.Image("Oxford/MAP/accessibility_to_cities_2015_v1_0")
+    'travel_time':ee.Image("Oxford/MAP/accessibility_to_cities_2015_v1_0"),
+    'pop_dens':ee.Image("CIESIN/GPWv411/GPW_UNWPP-Adjusted_Population_Density/gpw_v4_population_density_adjusted_to_2015_unwpp_country_totals_rev11_2000_30_sec"). \
+        select("unwpp-adjusted_population_density"). \
+        focal_mean(radius=20e3, kernelType='circle', units='meters')
 }
 
 for rast_name in GEE_rasts.keys():
@@ -33,12 +39,11 @@ cover_loss = ee.Image("UMD/hansen/global_forest_change_2018_v1_6").select('treec
     multiply(ee.Image("UMD/hansen/global_forest_change_2018_v1_6").select('loss')).reduceResolution(reducer=ee.Reducer.mean(), bestEffort=True)
 
 ee.batch.Export.image.toDrive(cover_loss,
-        description='cover_loss_v2',
+        description='cover_loss',
         crsTransform=[scale, 0, -180, 0, -scale, 90],
         crs='EPSG:4326',
         dimensions=str(int(360/scale)) + 'x' + str(int(180/scale)),
         folder="GEE_rasts",maxPixels=1e11).start()
-
 
 while True:
     states = pd.DataFrame(map(lambda x: x.status(), ee.batch.Task.list()))['state']
@@ -62,6 +67,6 @@ root_files_df = pd.DataFrame(root_files)
 folder_id = root_files_df['id'][root_files_df['title'] == "GEE_rasts"].tolist()[0]
 files = drive.ListFile({'q': "'{}' in parents and trashed=false".format(folder_id)}).GetList()
 for file in files:
-    file.GetContentFile("/home/chrisgraywolf/analysis_desktop/PA_matching/data_input/" + file['title'])
+    file.GetContentFile("/home/chrisgraywolf/shared/analysis/PA_matching/data_input/" + file['title'])
     # file.Delete()
 

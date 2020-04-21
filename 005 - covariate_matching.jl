@@ -5,10 +5,9 @@
 # https://stackoverflow.com/questions/29661315/vectorized-in-function-in-julia
 # https://stackoverflow.com/questions/46411683/julia-check-if-elements-from-one-vector-are-within-another-vector
 # https://discourse.julialang.org/t/how-can-i-rasterize-the-polygons-of-a-shapefile-in-julia/15089/4
-#
 
 using Distributed
-addprocs(24)
+addprocs(12)
 @everywhere using ArchGDAL
 using DataFrames
 using Statistics
@@ -21,15 +20,21 @@ using StatsBase
 using CSV
 using LibGEOS
 
-@everywhere cd("/home/chrisgraywolf/analysis_desktop/PA_matching/")
+@everywhere cd("/home/chrisgraywolf/shared/analysis/PA_matching/")
 
 function full_dataset()
         keep = ArchGDAL.read("data_processed/rasters/cover.tif") do dataset
                 band1 = ArchGDAL.getband(dataset,1)
-                vec(ArchGDAL.read(band1) .>= 30)
+                vec(ArchGDAL.read(band1) .>= 30) # only retain cells w/ at least 30% tree cover
         end
         ###
-        rast_names = ["elev","slope","cover","countries","ecoregions","forest_biome","travel_time","PAs","PAs_buffer","cover_loss"]
+        rast_names = ["elev","slope",
+                      "cover","loss","gain","cover_loss","lossyear",
+                      "travel_time","pop_dens",
+                      "countries","ecoregions","forest_biome",
+                      "PAs","PAs_buffer",
+                      "drivers",
+                      "threatened","non_threatened"]
         all_data = pmap(WorkerPool(Array(2:4)), rast_names) do rast_name
                 print(rast_name)
                 rast_vec = ArchGDAL.read("data_processed/rasters/" * rast_name * ".tif") do dataset
@@ -38,29 +43,51 @@ function full_dataset()
                 end
         end
         full = DataFrame(all_data, Symbol.(rast_names))
-        full = full[(full.ecoregions .>= 0) .& (full.countries .>= 0) .& (full.forest_biome .== 1) .& (full.slope .>= 0) .& (isnan.(full.cover_loss) .== false),:]
+        full[!,:pop_dens] = log.(1 .+ full[!,:pop_dens])
+        full = full[(full.ecoregions .>= 0) .&
+                    (full.countries .>= 0) .&
+                    (full.drivers .>= 0) .&
+                    (full.forest_biome .== 1) .&
+                    (full.slope .>= 0) .&
+                    (isnan.(full.cover_loss) .== false) .&
+                    (isnan.(full.pop_dens) .== false),:]
         full = full[.!((full.PAs .< 0) .& (full.PAs_buffer .== 1)),:] # exclude points w/in ~10 km of PAs
-        full[:,:loss] = - (((full[:,:cover] .- full[:,:cover_loss]) ./ full[:,:cover]).^(1/18) .- 1)
-        select!(full, Not([:forest_biome, :cover_loss, :PAs_buffer]))
+        #full[:,:loss] = - (((full[:,:cover] .- full[:,:cover_loss]) ./ full[:,:cover]).^(1/18) .- 1)
+        #select!(full, Not([:forest_biome, :cover_loss, :PAs_buffer]))
         return full
 end
 
-# omit contains columns to leave alone (e.g., treatment variable, categorical vars.),
-# manual is array containing names and breaks for specific columns (optional), method (either
-# quantile or uniform) specifying procedure for dividing other variables into n_class
-# groups. Example: manual = [("a",[1,3,5]), ("b",[2,4,6])]
-function coarsen_df(df_original, omit=[], method="quantile", n_class=5, manual=[])
+# calculate deforestation rate: overall, accounting for gain, and before/after if applicable (2002-2017)
+function deforestation_calc(df, year, name_prefix="")
+        C = sum(df[:,:cover])
+        CL = sum(df[:,:cover_loss])
+        CL_b = NaN
+        CL_a = NaN
+        Y_b = NaN
+        Y_a = NaN
+        L = sum(df[:,:loss])
+        G = sum(df[:,:gain])
+        if year in 2002:2017
+                CL_b = sum(df[indexin(2000 .+ df.lossyear, 2001:year-1) .!= nothing,:cover_loss])
+                CL_a = sum(df[indexin(2000 .+ df.lossyear, year+1:2018) .!= nothing,:cover_loss])
+                Y_b = length(2001:year-1)
+                Y_a = length(year+1:2018)
+        end
+        #
+        out = DataFrame(loss = - (((C - CL)/C)^(1/18) - 1),
+                        loss_before = - (((C - CL_b)/C)^(1/Y_b) - 1),
+                        loss_after = - (((C - CL_a)/C)^(1/Y_a) - 1),
+                        loss_gain = (L/18 - G/13)/C)
+        rename!(out, [Symbol(name_prefix * String(x)) for x in names(out)])
+        return out
+end
+
+# var contains names of columns to leave coarsen
+function coarsen_df(df_original, vars=[], method="quantile", n_class=5)
         df = deepcopy(df_original)
-        for col in names(df) # can prefix w/ Threads.@threads
+        for col in vars # can prefix w/ Threads.@threads
                 print(col)
-                if String(col) in omit
-                        continue
-                end
-                if String(col) in [x[1] for x in manual]
-                        breaks = manual[[x[1] == String(col) for x in manual]][1][2]
-                        df[:,col] = encode(LinearDiscretizer(breaks), float(df[:,col]))
-                elseif method == "quantile" # DiscretizeUniformCount doesn't handle ties well (extremely slow and often fails...)
-                        # df[:,col] = encode(LinearDiscretizer(binedges(DiscretizeUniformCount(n_class), float(df[:,col]))), float(df[:,col]))
+                if method == "quantile" # DiscretizeUniformCount doesn't handle ties well (extremely slow and often fails...)
                         df[:,col] = encode(LinearDiscretizer(quantile(float(df[:,col]), Array(0:1/n_class:1))), float(df[:,col]))
                 elseif method == "uniform"
                         df[:,col] = encode(LinearDiscretizer(binedges(DiscretizeUniformWidth(n_class), float(df[:,col]))), float(df[:,col]))
@@ -71,81 +98,80 @@ function coarsen_df(df_original, omit=[], method="quantile", n_class=5, manual=[
         return df
 end
 
-# TODO: add a binary treatment_var argument...
-function L1_imbalance(df, omit)
-        n_control = sum(df.PAs .< 0)
-        n_treatment = sum(df.PAs .>= 0)
+function L1_imbalance(df)
+        n_control = sum(df.treatment .== 0)
+        n_treatment = sum(df.treatment .== 1)
 
-        summary_gp = by(df, setdiff(names(df), Symbol.(omit))) do df_small
-                abs(sum(df_small.PAs .< 0) / n_control - sum(df_small.PAs .>= 0) / n_treatment)
+        summary_gp = by(df, setdiff(names(df), [:treatment])) do df_small
+                abs(sum(df_small.treatment .== 0) / n_control - sum(df_small.treatment .== 1) / n_treatment)
         end
 
         return sum(summary_gp[:,:x1]) / 2
 end
 
-# perform 1-to-k coarsened exact matching (TODO - add response_var arg etc.)
+# perform 1-to-k coarsened exact matching (TODO - add response_var arg etc.).  That is, match,
+# calculate loss rates for control pixels, then join to original treatment dataframe!
 function CEM(data_treatment, data_control)
-        omit = ["PAs","ecoregions","countries","loss","treatment"]
-        #
-        data_control[:,:treatment] .= 0 # 20,653,500 rows
+        ############# basic setup - add treatment variable and combine
+        coarsen = [:elev, :slope, :cover, :travel_time, :pop_dens] # variables that must be coarsened        
+        match = [:elev, :slope, :cover, :travel_time, :pop_dens, :countries, :ecoregions, :drivers] # variables to use for CEM
+        # build combined dataset
+        data_control[:,:treatment] .= 0
         data_treatment[:,:treatment] .= 1
-        #
+        # https://stackoverflow.com/questions/51544317/breaking-change-on-vcat-when-columns-are-missing
+        # https://discourse.julialang.org/t/vcat-does-not-append-dataframe-rows-as-it-did-in-0-10/9823/47
+        for n in unique([names(data_control); names(data_treatment)]), df in [data_control,data_treatment]
+                n in names(df) || (df[n] = NaN) # rbind.fill alternative - super ugly!
+        end
         data_all = vcat(data_treatment, data_control)
-        data_all_coarsened_auto = coarsen_df(data_all, omit, "uniform", 10)
-        L1_imbalance(data_all_coarsened_auto, ["PAs","loss","treatment"]) # 0.836 (high imbalance)
+        ############# aside: check L1 imbalance
+        data_all_coarsened_auto = coarsen_df(data_all, coarsen, "uniform", 10)
+        L1_imbalance(data_all_coarsened_auto[!,vcat(:treatment, match)]) # 0.879 (high imbalance)
         #
-        data_all_coarsened = coarsen_df(data_all, omit)
-        #
-        data_control_coarsened = data_all_coarsened[data_all_coarsened.treatment .== 0,:]
-        data_control_coarsened = by(data_control_coarsened, setdiff(names(data_control_coarsened), [:loss])) do df_small
-                out = DataFrame(df_small[1,:])
-                out.loss .= mean(df_small.loss) # want average loss within groups
+        data_all.cover_original = deepcopy(data_all.cover) # "matching" variable that must be coarsened and isneeded for loss calc.
+        ############# now perform 1-k matching by iterating over the PA cells
+        data_all_coarsened = coarsen_df(data_all, coarsen)
+        data_control_coarsened = data_all_coarsened[data_all_coarsened.treatment .== 0,setdiff(names(data_all_coarsened),[:PAs,:STATUS_YR])]
+        data_treatment_coarsened = data_all_coarsened[data_all_coarsened.treatment .== 1,:]
+        data_matched = join(data_treatment_coarsened[!,vcat(:PAs,:STATUS_YR,match)], data_control_coarsened, on = match, kind = :inner)
+        data_matched.cover = deepcopy(data_matched.cover_original) # non-coarsened version (for calculating loss rates)
+        data_matched = by(data_matched, :PAs) do df_small
+                out = float.(DataFrame(df_small[1,:]))
+                out = hcat(out, deforestation_calc(df_small, df_small.STATUS_YR[1], "Control_"))
                 out[:,:n_control] .= length(df_small.loss)
                 return out
-        end # 77,501 rows
-        data_treatment_coarsened = data_all_coarsened[data_all_coarsened.treatment .== 1,:] # 24,482 rows
-        # now join by covariates
-        data_control_coarsened[:control_loss] = data_control_coarsened.loss
-        select!(data_control_coarsened, Not([:PAs, :treatment, :loss]))
-        data_joined = join(data_treatment_coarsened, data_control_coarsened, on = setdiff(names(data_control_coarsened), [:control_loss, :n_control]), kind = :inner)
-        # plot(data_joined.loss, data_joined.control_loss, seriestype=:scatter)
-        # cor(data_joined.loss, data_joined.control_loss)
-        data_treatment = data_treatment[indexin(data_treatment.PAs,data_joined.PAs) .!= nothing,:]
-        data_treatment = hcat(data_treatment, data_joined[indexin(data_treatment.PAs,data_joined.PAs),[:control_loss,:n_control]])
-        # 
-        return data_treatment # 19,526 rows (79.8% retained)
+        end
+       ############# do a final join with original data_treatment and the control loss vars!
+        out = join(data_treatment, 
+                   data_matched[:,[:PAs, :Control_loss, :Control_loss_before, :Control_loss_after, :Control_loss_gain, :n_control]],
+                   on = :PAs,
+                   kind = :left)
+        return out
 end
 
 ################################ build full dataset and remove recent PAs
 
-full = full_dataset() # 26,359,211
+full = full_dataset() # 26,254,884
 
 PA_df = CSV.read("data_processed/PAs_tab.csv")
+main_PAs = PA_df[(PA_df.MARINE .== 0) .& (PA_df.STATUS .!= "Proposed") .& (PA_df.GIS_AREA .>= 1),:]
 
-# main PAs: Designated, area > 1km2, est. before 2000 // freqtable(PA_df.STATUS)
-# PA_df.GIS_AREA[PA_df.NAME .== "Yellowstone National Park"] # units are km2
-main_PAs = PA_df[(PA_df.MARINE .== 0) .& (PA_df.STATUS .!= "Proposed") .& (PA_df.GIS_AREA .>= 1) .& (PA_df.STATUS_YR .< 2000),:ID]
+# average covariates within PAs, adding year of establishment
+data_treatment = full[indexin(full.PAs,main_PAs.ID) .!= nothing,:]
+data_treatment[!,:STATUS_YR] = main_PAs.STATUS_YR[indexin(data_treatment.PAs,main_PAs.ID)]
 
-# want to retain only main_PAs, not sure why .∈ is slow; compare with
-# x = full.PAs
-# y = main_PAs
-# @rput x
-# @rput y
-# R"test = x %in% y"
-# R"test = match(x,y)" # same thing..
-# update: .∈ Ref(...) is awfully slow, but indexin is fine
-# (probably sorts first and then does something smart that
-# doesn't apply to the single element case)
-# test = full.PAs .∈ Ref(intersect(full.PAs, main_PAs))
+# note: This gets cols. 2 and 3: out[1,[2,3]]
+# but, this DOES NOT SET vals for these cols! out[1,[2,3]] = [1,2]
+# instead, need to do broadcast: out[1,[2,3]] = [1,2]
 
-# average covariates within PAs
-data_treatment = full[indexin(full.PAs,main_PAs) .!= nothing,:]
 data_treatment = by(data_treatment, :PAs) do df_small
+        disc_vars = [:lossyear, :countries, :ecoregions, :PAs, :drivers]
+        cont_vars = setdiff(names(df_small), disc_vars)
+        #
         out = float.(DataFrame(df_small[1,:]))
-        cont = setdiff(names(df_small),[:countries, :ecoregions, :PAs]) # continuous variables to average over
-        out[1,cont] = mean(convert(Array,df_small[:,cont]), dims=1)
-        out.ecoregions .= mode(df_small.ecoregions)
-        out.countries .= mode(df_small.countries)        
+        out[1,cont_vars] .= mean(convert(Array,df_small[:,cont_vars]), dims=1)[1,:]
+        out[1,disc_vars] .= [mode(col) for col = eachcol(df_small[:,disc_vars]), row=1] #
+        out = hcat(out, deforestation_calc(df_small, df_small.STATUS_YR[1], "PA_"))  
         return out
 end
 
