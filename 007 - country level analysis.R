@@ -34,159 +34,263 @@ require(lme4)
 require(spmoran)
 require(grid)
 require(ggforce)
+require(RCurl)
+require(jsonlite)
+require(data.table)
+require(dtplyr)
+require(unix)
+require(smoothr)
+require(ggrepel)
+
+rlimit_as(58e9) # soft (adjustable limit)
 
 project_dir = "/home/chrisgraywolf/shared/analysis/PA_matching/"
 setwd(project_dir)
 
-######################################## set up data
+######################################## set up country-level data
 
-# NEED TO DROP BIOS RESERVE ETC, MAYBE UNKNOWN TOO
-
-df_mod = readRDS("data_processed/PA_df.RDS") %>%
-        filter(matched) %>%
-        filter(group == "main") %>%
-        filter(cat_simple %in% c("Strict","Nonstrict")) %>%
-        filter(STATUS_YR > 0) %>%
-        mutate(age = 2020 - STATUS_YR,
-               travel_time = log(1 + travel_time),
-               GDP = log(GDP),
-               GIS_AREA = log(GIS_AREA),
-               PA_loss = log(1e-7 + PA_loss),
-               Control_loss = log(1e-7 + Control_loss)) %>%
-        select(lat,long,PA_loss,Control_loss,pop_dens,travel_time,age,GDP,cat_simple,GIS_AREA)
-
-worldmap = ne_download(scale = 110,
+countries_sf = ne_load(scale = 10, # use ne_download first time
                        type = "countries",
                        category = "cultural",
                        destdir = tempdir(),
-                       load = TRUE,
+                       #load = TRUE,
                        returnclass = "sf")
+countries_sf$ID = 1:nrow(countries_sf)
 
-######################################## fit model (todo: drop biosphere reserves!)
+total_species = read.csv("data_processed/species_data.csv") %>% # LC-CR forest exclusive
+        filter(countries != "") %>%
+        mutate(countries = as.character(countries)) %>%
+        pull(countries) %>%   
+        str_split(",") %>%
+        unlist %>%
+        table
 
-X = model.matrix(PA_loss ~ Control_loss + pop_dens + travel_time + age + GDP + cat_simple + GIS_AREA, data=df_mod)
+countries_sf$total = as.numeric(total_species[countries_sf$ISO_A2])
+countries_sf$total[is.na(countries_sf$total)] = 0
 
-start = Sys.time()
-mod = besf_vc(df_mod$PA_loss, x=X,
-              coords=cbind(df_mod$lat, df_mod$long),
-              covmodel="gau", # fails to run w/ "exp"!
-              maxiter=100) # ~20 sec.
-Sys.time() - start
+### add info from rasters
 
-# https://rdrr.io/cran/spmoran/man/besf_vc.html
-mod$s # note second row: all below 0.15 except for intercept (extremely high)
-mod$vc # everything but GDP effect was varying
+countries_rast = readAll(raster("data_processed/rasters/countries.tif"))
+cover = readAll(raster("data_processed/rasters/cover.tif"))
+carbon = readAll(raster("data_processed/rasters/carbon.tif"))
+cover_loss = readAll(raster("data_processed/rasters/cover_loss.tif"))
 
-coef = mod$b_vc %>%
-        data.frame(lat=df_mod$lat, long=df_mod$long) %>%
-        select(- c(GDP, X.Intercept.)) %>%
-        melt(id.vars=c("lat","long")) %>%
-        mutate(variable = revalue(variable, c("Control_loss"="Background rate",
-                                              "pop_dens"="Population density",
-                                              "travel_time"="Travel time",
-                                              "age"="Reserve age",
-                                              "cat_simpleStrict"="Strict protection",
-                                              "GIS_AREA"="Reserve area")))
+PAs = readAll(raster("data_processed/rasters/PAs.tif"))
+PAs[is.na(PAs[])] = 0
+PA_df = read.dbf("data_input/PAs/WDPA_Jan2020-shapefile-polygons.dbf", as.is=TRUE)
+PA_df$ID = as.numeric(factor(PA_df$WDPAID))
+PAs[PAs[] %in% PA_df$ID[PA_df$STATUS == "Proposed"]] = 0
+PAs[PAs[] > 0] = 1
 
-SE = mod$bse_vc %>%
-        data.frame(lat=df_mod$lat, long=df_mod$long) %>%
-        select(- c(GDP, X.Intercept.)) %>%
-        melt(id.vars=c("lat","long")) %>%
-        mutate(variable = revalue(variable, c("Control_loss"="Background rate",
-                                              "pop_dens"="Population density",
-                                              "travel_time"="Travel time",
-                                              "age"="Reserve age",
-                                              "cat_simpleStrict"="Strict protection",
-                                              "GIS_AREA"="Reserve area")))
+dt = data.table(cover=cover[],
+                PAs=PAs[],
+                countries=countries_rast[],
+                carbon=carbon[],
+                cover_loss=cover_loss[])
+cover = PAs = countries = carbon = cover_loss = NULL; gc();
+dt = dt[! is.na(countries),]; gc();
 
-p_val = mod$p_vc %>%
-        data.frame(lat=df_mod$lat, long=df_mod$long) %>%        
-        select(- c(GDP, X.Intercept.)) %>%
-        melt(id.vars=c("lat","long")) %>%
-        mutate(variable = revalue(variable, c("Control_loss"="Background rate",
-                                              "pop_dens"="Population density",
-                                              "travel_time"="Travel time",
-                                              "age"="Reserve age",
-                                              "cat_simpleStrict"="Strict protection",
-                                              "GIS_AREA"="Reserve area")))
+prot_df = data.frame(dt[, .(protected_raw=mean(PAs),
+                            prop_forest=mean(cover >= 30),
+                            area_forest=sum(cover >= 30),
+                            cover=sum(cover),
+                            cover_loss=sum(cover_loss, na.rm=TRUE),
+                            carbon=sum(carbon, na.rm=TRUE)), by=c('countries'),])
+prot_df$loss = 1 - ((prot_df$cover - prot_df$cover_loss)/prot_df$cover)^(1/18)
 
-# https://stackoverflow.com/questions/55922441/expand-argument-in-scale-color-gradient-is-ignored
-p_ramp = c(rev(colorRampPalette(brewer.pal(9,"Blues"))(1e3)),
-           rev(colorRampPalette(brewer.pal(9,"Reds"))(1e3)))
+countries_sf = merge(countries_sf, prot_df, by.x="ID", by.y="countries", all.x=TRUE)
 
-plot_list = lapply(unique(coef$variable), function(var){
-        p_0 = textGrob(var,gp=gpar(fontsize=20), rot=90)
-        u = max(abs(range(coef[coef$variable == var,]$value)))
-        p_1 = ggplot(coef[coef$variable == var,]) +
-                geom_point(aes(x=long,y=lat,color=value)) +
-                scale_color_gradientn(colors=rev(brewer.pal(11,"PiYG")),
-                                      limits=c(-u,u),
-                                      guide=guide_colorbar(title=NULL,
-                                                           nbin=1000)) +
-                geom_sf(data=worldmap, fill=NA, color="black") +
-                theme_bw() +
-                theme(axis.title=element_blank(),
-                      panel.grid.major=element_blank(),
-                      axis.text=element_blank(),
-                      axis.ticks=element_blank(),
-                      plot.title=element_text(hjust=0.5),
-                      legend.position=c(0.00,0.00),
-                      legend.justification=c(0,0),
-                      legend.background=element_rect(color="black",fill="white")) +
-                scale_x_continuous(expand=c(0,0)) +
-                scale_y_continuous(limits=range(df_mod$lat), expand=c(0.05,0.05))
-        p_2 = ggplot(SE[SE$variable == var,]) +
-                geom_point(aes(x=long,y=lat,color=value)) +
-                scale_color_gradientn(colors=brewer.pal(9,"BuPu"),
-                                      guide=guide_colorbar(title=NULL,
-                                                           nbin=1000)) +
-                geom_sf(data=worldmap, fill=NA, color="black") +
-                theme_bw() +
-                theme(axis.title=element_blank(),
-                      panel.grid.major=element_blank(),
-                      axis.text=element_blank(),
-                      axis.ticks=element_blank(),
-                      plot.title=element_text(hjust=0.5),
-                      legend.position=c(0.00,0.00),
-                      legend.justification=c(0,0),
-                      legend.background=element_rect(color="black",fill="white")) +
-                scale_x_continuous(expand=c(0,0)) +
-                scale_y_continuous(limits=range(df_mod$lat), expand=c(0.05,0.05))
-        p_3 = ggplot(p_val[p_val$variable == var,]) +
-                geom_point(aes(x=long,y=lat,color=value)) +
-                scale_color_gradientn(colors=p_ramp,
-                                      values=c(seq(0,0.05^(1/2),length=1e3),seq(0.05^(1/2),1,length=1e3)),
-                                      trans=power_trans(1/2),
-                                      limits=c(0,1),
-                                      breaks=c(0,0.05,0.25,0.5,1),
-                                      guide=guide_colorbar(title=NULL,
-                                                           nbin=1000)) +
-                geom_sf(data=worldmap, fill=NA, color="black") +
-                theme_bw() +
-                theme(axis.title=element_blank(),
-                      panel.grid.major=element_blank(),
-                      axis.text=element_blank(),
-                      axis.ticks=element_blank(),
-                      plot.title=element_text(hjust=0.5),
-                      legend.position=c(0.00,0.00),
-                      legend.justification=c(0,0),
-                      legend.background=element_rect(color="black",fill="white")) +
-                scale_x_continuous(expand=c(0,0)) +
-                scale_y_continuous(limits=range(df_mod$lat), expand=c(0.05,0.05))
-        return(list(p_0, p_1, p_2, p_3))
-})
-plot_list = unlist(plot_list, recursive=FALSE)
+###
 
-plot_list_titles = c(lapply(c("","Coefficient","Standard error","p-value"), function(x) textGrob(x,gp=gpar(fontsize=20))),
-              plot_list)
+eff_df = readRDS("data_processed/PA_df.RDS") %>%
+        filter(matched) %>%
+        filter(group == "main") %>%
+        group_by(ISO3_single) %>%
+        dplyr::summarise(effectiveness = mean(Control_loss)/mean(PA_loss),
+                         n = length(PA_loss)) %>%
+        data.frame
 
-all = plot_grid(plotlist=plot_list_titles,ncol=4,rel_widths=c(0.6,rep(5,3)),rel_heights=c(0.35,rep(3,length(unique(coef$variable)))))
+setdiff(eff_df$ISO3_single, countries_sf$ISO_A3)
+countries_sf$ISO_A3[countries_sf$NAME == "Norway"] = "NOR"
+countries_sf$ISO_A3[countries_sf$NAME == "France"] = "FRA"
 
-png("output/svc.png", width=18, height=16, units="in", res=200)
+countries_sf = merge(countries_sf, eff_df, by.x="ISO_A3", by.y="ISO3_single", all.x=TRUE)
+
+countries_sf$protected = countries_sf$protected_raw * countries_sf$effectiveness
+countries_sf$adj_threat = countries_sf$total / countries_sf$protected
+countries_sf$log_carbon = log(countries_sf$carbon, base=10)
+countries_sf$adj_carbon = countries_sf$log_carbon / countries_sf$protected
+countries_sf$adj_loss = countries_sf$loss / countries_sf$protected
+
+saveRDS(countries_sf, "temp/countries_sf.RDS")
+countries_sf = readRDS("temp/countries_sf.RDS")
+
+country_data = countries_sf %>%
+        filter(n >= 50 & total >= 15 & area_forest >= 100^2)
+
+cor(country_data$protected, country_data$protected_raw) # 0.54 (paper text)
+
+##################### mapping etc.
+
+robin = CRS("+proj=robin +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs")
+bbox = st_sf(geometry=st_as_sfc(st_bbox())) %>% densify(100)
+
+bbox_robin = st_transform(bbox, robin)
+countries_sf_robin = st_transform(countries_sf, robin)
+country_data_robin = st_transform(country_data, robin)
+
+ex = st_bbox(country_data_robin)
+
+##################### total (adjusted)
+
+col_mult_adj = max(country_data$total)/max(country_data$protected) # for color scale
+brks = c(100,1000,2500,10000)
+
+bg_adj = expand.grid(protected=seq(0,
+	                           1.05*max(country_data$protected,na.rm=TRUE),
+                                   length=1e2),
+	             total=seq(1e-10,
+                               1.05*max(country_data$total,na.rm=TRUE),length=1e2))
+bg_adj$adj_threat = bg_adj$total / bg_adj$protected
+col_lim = atan(range(bg_adj$adj_threat)/col_mult_adj)
+
+p_bot = ggplot() +
+	geom_sf(data=bbox_robin, fill="#ccccff") +
+	geom_sf(data=countries_sf, fill="#888888", colour=NA) +	
+	geom_sf(data=country_data, aes(fill=atan(adj_threat/col_mult_adj)), color=NA) +
+	geom_sf(data=countries_sf, fill=NA, colour="black", size=0.05) +	
+	theme_bw() +
+	coord_sf(xlim=ex[c(1,3)], ylim=ex[c(2,4)]) +
+	scale_fill_gradientn(colours=viridis(50),
+                             breaks=atan(brks/col_mult_adj),
+                             labels=brks,
+                             limits=col_lim) +
+	theme(axis.line=element_blank(),
+              plot.margin=margin(3,3,3,20),              
+              axis.text=element_blank(),
+              axis.ticks=element_blank(),
+              axis.title=element_blank(),
+              panel.grid.major=element_blank(),
+              panel.grid.minor=element_blank(),
+              legend.position="bottom",
+              legend.key.width=unit(2.5,"lines"),
+              legend.background = element_rect(fill=NULL,color="black")) +
+	guides(fill=guide_colorbar(title="Adjusted threat  \nindex", nbin=300))
+
+p_top = ggplot(country_data, aes(y=total,x=protected)) +
+	geom_raster(data=bg_adj, aes(fill=atan(adj_threat/col_mult_adj))) +
+	geom_point() +
+	scale_fill_gradientn(colours=viridis(50),
+                             breaks=atan(brks/col_mult_adj),
+                             labels=brks,
+                             limits=col_lim) +
+	theme_bw() +
+	xlab("(Proportion of forested area protected) * (PA effectiveness)") +
+	theme(axis.text=element_text(color="black"),
+              plot.margin=margin(3,3,3,20),
+	      legend.position="bottom") +
+	scale_x_continuous(expand=c(0,0)) +
+	scale_y_continuous(expand=c(0,0)) +
+	ylab("Number of forest vertebrates") +
+	guides(fill=FALSE) +
+        geom_text_repel(aes(label=NAME),
+                        size=3,
+                        nudge_y = 10.5 * (country_data$NAME == "Japan"),
+                        nudge_x = 0.05 * (country_data$NAME == "South Korea"))
+
+all = plot_grid(p_top, p_bot, ncol=1, labels=c("A.","B."), rel_heights=c(2,1.5), hjust=0)
+
+png("output/adj_threat.png", width=6, height=9, units="in", res=400)
 all
 dev.off()
 
-pdf("output/svc.pdf", width=18, height=16)
+pdf("output/adj_threat.pdf", width=6, height=9)
 all
 dev.off()
+
+##################### carbon and deforestation plots
+# https://stackoverflow.com/questions/46058055/r-ggplot2-for-loop-plots-same-data
+# https://stackoverflow.com/questions/49183067/trying-to-make-a-list-of-ggplot-objects-in-a-for-loop-all-items-in-list-are-wri
+
+col_mult_adj_left = max(country_data$loss)/max(country_data$protected) # for color scale
+brks = c(0.01,0.03,0.07,1)
+
+bg_adj = expand.grid(protected=seq(0,
+	                           1.05*max(country_data$protected,na.rm=TRUE),
+                                   length=1e2),
+	             loss=seq(0.95*min(country_data$loss,na.rm=TRUE),
+                                    1.05*max(country_data$loss,na.rm=TRUE),
+                                    length=1e2))
+
+bg_adj$adj_loss = bg_adj$loss / bg_adj$protected
+col_lim = atan(range(bg_adj$adj_loss)/col_mult_adj_left)
+
+p_left = ggplot(country_data, aes(y=loss,x=protected)) +
+	geom_raster(data=bg_adj, aes(fill=atan(adj_loss/col_mult_adj_left))) +
+	geom_point() +
+	scale_fill_gradientn(colours=viridis(50),
+                             breaks=atan(brks/col_mult_adj_left),
+                             labels=brks,
+                             limits=col_lim) +
+	theme_bw() +
+	xlab("(Proportion of forested area protected) * (PA effectiveness)") +
+	theme(axis.text=element_text(color="black"),
+              plot.margin=margin(3,3,3,20),
+              legend.key.width=unit(2.5,"lines"),              
+	      legend.position="bottom") +
+	scale_x_continuous(expand=c(0,0)) +
+	scale_y_continuous(expand=c(0,0)) +
+	ylab("Annual deforestation rate (%)") +
+        geom_text_repel(aes(label=NAME)) +
+	guides(fill=guide_colorbar(title="Adjusted threat  \nindex (forest loss)", nbin=300))
+
+###
+
+col_mult_adj_right = max(country_data$log_carbon)/max(country_data$protected) # for color scale
+brks = c(15,25,50,100)
+
+bg_adj = expand.grid(protected=seq(0,
+	                           1.05*max(country_data$protected,na.rm=TRUE),
+                                   length=1e2),
+	             log_carbon=seq(0.95*min(country_data$log_carbon,na.rm=TRUE),
+                                    1.05*max(country_data$log_carbon,na.rm=TRUE),
+                                    length=1e2))
+
+bg_adj$adj_carbon = bg_adj$log_carbon / bg_adj$protected
+col_lim = atan(range(bg_adj$adj_carbon)/col_mult_adj_right)
+
+p_right = ggplot(country_data, aes(y=log_carbon,x=protected)) +
+	geom_raster(data=bg_adj, aes(fill=atan(adj_carbon/col_mult_adj_right))) +
+	geom_point() +
+	scale_fill_gradientn(colours=viridis(50),
+                             breaks=atan(brks/col_mult_adj_right),
+                             labels=brks,
+                             limits=col_lim) +
+	theme_bw() +
+	xlab("(Proportion of forested area protected) * (PA effectiveness)") +
+	theme(axis.text=element_text(color="black"),
+              plot.margin=margin(3,3,3,20),
+              legend.key.width=unit(2.5,"lines"),              
+	      legend.position="bottom") +
+	scale_x_continuous(expand=c(0,0)) +
+	scale_y_continuous(expand=c(0,0)) +
+	ylab("Total aboveground forest carbon (gt)") +
+        geom_text_repel(aes(label=NAME)) +
+	guides(fill=guide_colorbar(title="Adjusted threat  \nindex (carbon)", nbin=300))
+
+all = plot_grid(p_left, p_right, ncol=2, labels=c("A.","B."))
+
+png("output/adj_loss_carbon.png", width=12, height=8, units="in", res=400)
+all
+dev.off()
+
+pdf("output/adj_loss_carbon.pdf", width=12, height=8)
+all
+dev.off()
+
+##################### write table
+
+country_tab = data.frame(country_data)
+country_tab$geometry = NULL
+write.csv(country_tab, "output/country_tab.csv")
 

@@ -54,7 +54,7 @@ df_mod = readRDS("data_processed/PA_df.RDS") %>%
                GIS_AREA = log(GIS_AREA),
                PA_loss = log(1e-7 + PA_loss),
                Control_loss = log(1e-7 + Control_loss)) %>%
-        select(lat,long,PA_loss,Control_loss,pop_dens,travel_time,age,GDP,cat_simple,GIS_AREA)
+        select(lat,long,PA_loss,Control_loss,pop_dens,travel_time,age,GDP,cat_simple,GIS_AREA, threatened, non_threatened)
 
 worldmap = ne_download(scale = 110,
                        type = "countries",
@@ -63,7 +63,7 @@ worldmap = ne_download(scale = 110,
                        load = TRUE,
                        returnclass = "sf")
 
-######################################## fit model (todo: drop biosphere reserves!)
+######################################## fit main model, plot results
 
 X = model.matrix(PA_loss ~ Control_loss + pop_dens + travel_time + age + GDP + cat_simple + GIS_AREA, data=df_mod)
 
@@ -203,5 +203,145 @@ dev.off()
 
 pdf("output/svc_single.pdf", width=1.1*5, height=7)
 single
+dev.off()
+
+######################################## species richness models
+
+mod_threatened = besf_vc(df_mod$PA_loss, x=model.matrix(PA_loss ~ Control_loss + threatened, data=df_mod),
+              coords=cbind(df_mod$lat, df_mod$long),
+              covmodel="gau",
+              maxiter=100)
+mod_non_threatened = besf_vc(df_mod$PA_loss, x=model.matrix(PA_loss ~ Control_loss + non_threatened, data=df_mod),
+              coords=cbind(df_mod$lat, df_mod$long),
+              covmodel="gau",
+              maxiter=100)
+
+mod_threatened$vc # not SV
+mod_threatened$b_vc$threatened[1] # coef
+mod_threatened$bse_vc$threatened[1] # SE
+mod_threatened$p_vc$threatened[1] # p-val
+
+mod_non_threatened$vc
+
+coef = mod_non_threatened$b_vc %>%
+        data.frame(lat=df_mod$lat, long=df_mod$long) %>%
+        select(- c(Control_loss, X.Intercept.))
+SE = mod_non_threatened$bse_vc %>%
+        data.frame(lat=df_mod$lat, long=df_mod$long) %>%
+        select(- c(Control_loss, X.Intercept.))
+p_val = mod_non_threatened$p_vc %>%
+        data.frame(lat=df_mod$lat, long=df_mod$long) %>%
+        select(- c(Control_loss, X.Intercept.))
+
+u = coef$non_threatened %>% range %>% abs %>% max
+
+p_coef = ggplot(coef) +
+                geom_point(aes(x=long,y=lat,color=non_threatened)) +
+                scale_color_gradientn(colors=rev(brewer.pal(11,"PiYG")),
+                                      limits=c(-u,u),
+                                      guide=guide_colorbar(title="Coefficient",
+                                                           nbin=1000)) +
+                geom_sf(data=worldmap, fill=NA, color="black") +
+                theme_bw() +
+                theme(axis.title=element_blank(),
+                      panel.grid.major=element_blank(),
+                      axis.text=element_blank(),
+                      axis.ticks=element_blank(),
+                      plot.title=element_text(hjust=0.5),
+                      legend.position="right",
+                      legend.background=element_rect(color="black",fill="white")) +
+                scale_x_continuous(expand=c(0,0)) +
+                scale_y_continuous(limits=range(df_mod$lat), expand=c(0.05,0.05))
+
+p_SE = ggplot(SE) +
+                geom_point(aes(x=long,y=lat,color=non_threatened)) +
+                scale_color_gradientn(colors=brewer.pal(9,"BuPu"),
+                                      guide=guide_colorbar(title="Standard\nerror",
+                                                           nbin=1000)) +
+                geom_sf(data=worldmap, fill=NA, color="black") +
+                theme_bw() +
+                theme(axis.title=element_blank(),
+                      panel.grid.major=element_blank(),
+                      axis.text=element_blank(),
+                      axis.ticks=element_blank(),
+                      plot.title=element_text(hjust=0.5),
+                      legend.position="right",
+                      legend.background=element_rect(color="black",fill="white")) +
+                scale_x_continuous(expand=c(0,0)) +
+                scale_y_continuous(limits=range(df_mod$lat), expand=c(0.05,0.05))
+
+p_p_val = ggplot(p_val) +
+                geom_point(aes(x=long,y=lat,color=non_threatened)) +
+                scale_color_gradientn(colors=p_ramp,
+                                      values=c(seq(0,0.05^(1/2),length=1e3),seq(0.05^(1/2),1,length=1e3)),
+                                      trans=power_trans(1/2),
+                                      limits=c(0,1),
+                                      breaks=c(0,0.05,0.25,0.5,1),
+                                      guide=guide_colorbar(title="p-value",
+                                                           nbin=1000)) +
+                geom_sf(data=worldmap, fill=NA, color="black") +
+                theme_bw() +
+                theme(axis.title=element_blank(),
+                      panel.grid.major=element_blank(),
+                      axis.text=element_blank(),
+                      axis.ticks=element_blank(),
+                      plot.title=element_text(hjust=0.5),
+                      legend.position="right",
+                      legend.background=element_rect(color="black",fill="white")) +
+                scale_x_continuous(expand=c(0,0)) +
+                scale_y_continuous(limits=range(df_mod$lat), expand=c(0.05,0.05))
+
+p_non_threatened = plot_grid(plotlist=list(p_coef,p_SE,p_p_val), ncol=1, align="v")
+
+png("output/non_threatened.png", width=7, height=7, units="in", res=300)
+p_non_threatened
+dev.off()
+
+pdf("output/non_threatened.pdf", width=7, height=7)
+p_non_threatened
+dev.off()
+
+### map species richness for context
+
+titles = c("threatened"="Threatened forest\nspecies richness",
+           "non_threatened"="Non-threatened forest\nspecies richness")
+
+world_behr = st_transform(worldmap,crs(rast))
+
+plot_list = lapply(names(titles), function(rast_name){
+        rast = velox(raster(paste0("data_processed/rasters/",rast_name,".tif")))
+        rast$aggregate(10,aggtype="median")
+        rast = rast$as.RasterLayer()
+        rast[rast[] %in% 0] = NA
+        pts = data.frame(rasterToPoints(rast))
+
+        p = ggplot(pts, aes(x=x,y=y,fill=layer)) +
+                geom_raster() +
+                scale_fill_gradientn(colors=brewer.pal(11,"Spectral"),
+                                     limits=c(0,NA),
+                                     guide=guide_colorbar(title=titles[rast_name],
+                                                           nbin=1000)) +
+                geom_sf(data=world_behr, aes(x=NULL,y=NULL), fill=NA, color="black", size=0.2) +
+                theme_bw() +
+                theme(axis.title=element_blank(),
+                      panel.grid.major=element_blank(),
+                      axis.text=element_blank(),
+                      axis.ticks=element_blank(),
+                      plot.title=element_text(hjust=0.5),
+                      legend.position="right",
+                      legend.background=element_rect(color="black",fill="white")) +
+                scale_x_continuous(limits=range(pts$x), expand=c(0.05,0.05)) +
+                scale_y_continuous(limits=range(pts$y), expand=c(0.05,0.05))
+        return(p)
+})
+
+p_richness = plot_grid(plotlist=plot_list[2:1], ncol=1, align="hv")
+
+png("output/richness.png", width=6.8, height=3.85, units="in", res=400)
+p_richness
+dev.off()
+
+pdf("output/richness.pdf", width=6.8, height=3.85)
+p_richness
 dev.off()
 

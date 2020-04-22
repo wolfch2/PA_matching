@@ -318,3 +318,38 @@ dev.off()
 100*tapply(df$value, df$variable, median)
 100*tapply(df$value, df$variable, mean)
 
+### basic PA map
+
+df = readRDS("data_processed/PA_df.RDS") %>%
+        filter(group == "main" & matched) %>%
+        mutate(cat_simple=factor(cat_simple,levels=sort(unique(df$cat_simple)),
+                                 labels=paste0(names(table(df$cat_simple))," (",table(df$cat_simple),")")))
+
+p = ggplot(df) +
+                geom_point(aes(x=long,y=lat,fill=log(GIS_AREA)), shape=21, size=1.25*0.35, stroke=1.25*0.1) +
+                facet_wrap(~ cat_simple, ncol=1) +
+                geom_sf(data=worldmap, fill=NA, color="black", size=0.2) +
+                theme_bw() +
+                theme(axis.title=element_blank(),
+                      panel.grid.major=element_blank(),
+                      axis.text=element_blank(),
+                      axis.ticks=element_blank(),
+                      plot.title=element_text(hjust=0.5),
+                      legend.position="right",
+                      legend.background=element_rect(color="black",fill="white")) +
+                scale_x_continuous(expand=c(0,0)) +
+                scale_y_continuous(limits=range(df_mod$lat), expand=c(0.05,0.05)) +
+		guides(fill = guide_colorbar(title=bquote('Area (' * km^2 * ')'))) +
+                scale_fill_gradientn(colors=viridis(50), # viridis(100),
+			breaks=log(10^(-10:10)), labels=prettyNum(10^(-10:10),big.mark=",",scientific=FALSE))
+
+p_non_threatened = plot_grid(plotlist=list(p_coef,p_SE,p_p_val), ncol=1, align="v")
+
+png("output/PA_pts.png", width=6.8, height=7, units="in", res=300)
+p
+dev.off()
+
+pdf("output/PA_pts.pdf", width=6.8, height=7)
+p
+dev.off()
+

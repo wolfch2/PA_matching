@@ -10,6 +10,7 @@ require(rasterVis)
 require(landscapetools)
 require(velox)
 require(rnaturalearth)
+require(ncdf4)
 
 rasterOptions(maxmemory = 1e+09) # want to handle all cells of 1-km global rasters in memory
 rasterOptions(chunksize = 1e+09)
@@ -90,6 +91,31 @@ for(rast_name in c("cover_loss","loss","cover","gain","pop_dens","travel_time","
                        of="GTiff",
                        co=c("COMPRESS=LZW","BIGTIFF=YES"))
 }
+
+######################################## forest carbon
+
+carbon_URL = "https://daac.ornl.gov/bundle/Global_Biomass_1950-2010_1296.zip"
+system(paste0("wget --content-disposition \"", carbon_URL, "\" -nc --tries=0 -P ", project_dir, "data_input"))
+system("unzip data_input/Global_Biomass_1950-2010_1296.zip -d data_input")
+file.remove("data_input/Global_Biomass_1950-2010_1296.zip")
+
+#  Aboveground forest tree biomass (tonnes carbon / 1-degree grid cell)
+carbon = stack("data_input/Global_Biomass_1950-2010_1296/data/historical_global_1-degree_forest_biomass.nc4", varname="AboveGroundBiomass")
+carbon = carbon[["X50.5"]] # 50.5 years after 1/1/1950 -> 2000
+carbon = carbon / area(carbon) # divide by km_2 per 1-degree pixel area
+writeRaster(carbon, "data_input/carbon.tif")
+
+gdalwarp(srcfile="data_input/carbon.tif",
+                 "data_input/carbon_proj.vrt",
+                 tr=c(1000,1000),
+                 of="VRT",
+                 t_srs="+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +datum=WGS84 +ellps=WGS84 +units=m +no_defs",
+                 te=extent(elev)[c(1,3,2,4)])
+
+gdal_translate("data_input/carbon_proj.vrt",
+               "data_processed/rasters/carbon.tif",
+               of="GTiff",
+               co=c("COMPRESS=LZW","BIGTIFF=YES"))
 
 ######################################## protected areas (dl from WDPA)
 
