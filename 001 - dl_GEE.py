@@ -10,8 +10,9 @@ ee.Initialize()
 
 scale = 0.008983153 # checked w/ small region export at 1000 m
 
+# for lossyear, mask out zeros and use mode resampling to ensure we have data for each pixel with forest loss
 lossyear = ee.Image("UMD/hansen/global_forest_change_2018_v1_6").select('lossyear')
-lossyear = lossyear.updateMask(lossyear.neq(0)).focal_mode(radius=500, kernelType='square', units='meters') # avoid bias toward 0 from resampling
+lossyear = lossyear.updateMask(lossyear.neq(0)).reduceResolution(reducer=ee.Reducer.mode(maxRaw=20), bestEffort=True)
 
 GEE_rasts = {
     'land':ee.Image("MODIS/MOD44W/MOD44W_005_2000_02_24").select('water_mask').eq(0).unmask(0),

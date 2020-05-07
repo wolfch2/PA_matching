@@ -294,3 +294,22 @@ country_tab = data.frame(country_data)
 country_tab$geometry = NULL
 write.csv(country_tab, "output/country_tab.csv")
 
+# paper text
+dim(country_tab)
+sum(country_tab$protected_raw >= 0.17)
+mean(country_tab$protected_raw >= 0.17)
+sum(country_tab$protected_raw >= 0.5)
+
+country_tab %>%
+        select(NAME, total, adj_threat) %>%
+        filter(total >= 500) %>%
+        arrange(desc(adj_threat))
+
+country_tab %>%
+        select(NAME, loss, protected_raw) %>%
+        arrange(desc(loss))
+
+country_tab %>%
+        select(NAME, carbon, adj_carbon) %>%
+        arrange(desc(carbon))
+

@@ -133,7 +133,7 @@ PAs_binary[is.na(PAs_binary[])] = 0
 writeRaster(PAs_binary, "data_processed/PAs_binary.tif")
 system("gdal_proximity.py data_processed/PAs_binary.tif data_processed/PAs_dist.tif -distunits GEO")
 PAs_dist = raster("data_processed/PAs_dist.tif")
-PAs_buffer = PA_dists <= 10e3
+PAs_buffer = PA_dists <= 10e3 # note - this is just an approximate 10-km buffer because of distortion due to the projection
 writeRaster(PAs_buffer, "data_processed/rasters/PAs_buffer.tif")
 file.remove("data_processed/PAs_dist.tif")
 

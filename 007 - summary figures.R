@@ -35,6 +35,7 @@ require(spmoran)
 require(grid)
 require(ggforce)
 require(sf)
+require(smoothr)
 
 quants = function(x) data.frame(ymin=quantile(x,0.25),ymax=quantile(x,0.75))
 se_fun = function(x) data.frame(ymin=mean(x) - sd(x)/sqrt(length(x)),
@@ -61,7 +62,7 @@ countries = raster("data_processed/rasters/countries.tif")
 cover = raster("data_processed/rasters/cover.tif") %>%
         mask(countries)
 PA_rast = read_sf("data_input/PAs/WDPA_Jan2020-shapefile-polygons.shp") %>%
-        filter(STATUS != "Proposed") %>%
+        dplyr::filter(STATUS != "Proposed") %>%
         st_transform(st_crs(cover)) %>%
         fasterize(PAs, cover)
 
@@ -69,8 +70,14 @@ tab = table(cover[] >= 30, PA_rast[], useNA="always")
 prop.table(tab,1) # 15.7% of forest is protected
 
 df = readRDS("data_processed/PA_df.RDS") %>%
-        filter(group == "main") %>%
-        filter(matched)
+        dplyr::filter(group == "main" & matched)
+
+# absolute terms - approximate total forest loss per year on average:
+(100*sum(df$GIS_AREA * df$cover_loss/100)/18)/1e6 # (/100 to convert to proportion of pixel)
+
+sum(df$GIS_AREA)
+
+mean(df$PA_loss == 0)
 
 inside = df$PA_loss
 outside = df$Control_loss
@@ -79,6 +86,7 @@ round(100 * mean(outside), 3) # 1.053% mean deforestation rate inside control ar
 
 ### adjust total % of forest protected (for paper text...)
 prop.table(tab,1)["TRUE","1"] * (1 - mean(inside)/mean(outside)) # 6.45% protected after adjusting
+1 - mean(inside)/mean(outside) # reduction
 0.17 / (1 - mean(inside)/mean(outside)) # would need 41.34% to match 17% w/ no loss
 
 ### simple comparison of rates
@@ -101,7 +109,7 @@ df_dev = rbind(df, developed, developing)
 
 ### main comparison (boxplot) (UPDATED)
 
-df_small = melt(df_dev, measure.vars=c("PA_loss","Control_loss"))
+df_small = reshape2::melt(df_dev, measure.vars=c("PA_loss","Control_loss"))
 df_small$variable = factor(df_small$variable,
 	levels=rev(c("PA_loss","Control_loss")),
 	labels=rev(c("PA deforestation rate","Control deforestation rate")))
@@ -193,7 +201,7 @@ dev.off()
 ### change comparison (boxplot)
 
 df = readRDS("data_processed/PA_df.RDS") %>%
-        filter(group == "change" & matched) %>%        
+        dplyr::filter(group == "change" & matched) %>%        
         mutate(loss_delta_inside = PA_loss_after - PA_loss_before,
                loss_delta_outside = Control_loss_after - Control_loss_before) %>%
         melt(measure.vars=c("loss_delta_inside","loss_delta_outside")) %>%
@@ -215,7 +223,7 @@ p = ggplot(df_small[table(df_small$gp)[df_small$gp] >= 10 & df_small$cat_simple 
         geom_hline(yintercept=0, linetype="dashed", alpha=0.5) +
 	stat_summary(fun.data=se_fun, geom = "errorbar",
 		position=position_dodge(width=2/3),width=0) +
-	stat_summary(fun.y=mean, geom = "point",position=position_dodge(width=2/3)) + # median often 0 -> using mean w/ SE
+	stat_summary(fun.y=mean, geom = "point",position=position_dodge(width=2/3)) + 
         facet_wrap(~ cat_simple, ncol=1) +
 	scale_color_manual(values=brewer.pal(3,"Set1")) +
 	coord_flip() +
@@ -242,6 +250,12 @@ dev.off()
 # paper text
 round(100*mean(df$PA_loss_before), 3) 
 round(100*mean(df$PA_loss_after), 3) 
+P = df$PA_loss_after - df$PA_loss_before
+C = df$Control_loss_after - df$Control_loss_before
+round(100*mean(P), 3)
+round(100*mean(C), 3)
+100*sd(P)/sqrt(length(P))
+100*sd(C)/sqrt(length(C))
 round(100*mean(df$Control_loss_before), 3) 
 round(100*mean(df$Control_loss_after), 3) 
 round(100*tapply(df_small$value, list(df_small$variable, df_small$Continent), mean),3)
@@ -249,8 +263,8 @@ round(100*tapply(df_small$value, list(df_small$variable, df_small$Continent), me
 ### summarize basic discrete data (UPDATED)
 
 df_long = readRDS("data_processed/PA_df.RDS") %>%
-        filter(group == "main") %>%
-        filter(matched) %>%
+        dplyr::filter(group == "main") %>%
+        dplyr::filter(matched) %>%
         dplyr::count(IUCN_CAT, cat_simple, Continent) %>%
         mutate(IUCN_CAT = factor(IUCN_CAT,
                                  levels=rev(c("Ia","Ib","II","III","IV","V","VI",
@@ -281,10 +295,10 @@ png("output/discrete.png", width=6, height=6, units="in", res=400)
 p
 dev.off()
 
-### loss and cover histograms
+### loss histograms
 
 df = readRDS("data_processed/PA_df.RDS") %>%
-        filter(group == "main" & matched) %>%
+        dplyr::filter(group == "main" & matched) %>%
         select(cat_simple, Continent, PA_loss, Control_loss) %>%
         melt(id.vars=c("cat_simple","Continent")) %>%
         mutate(variable=factor(variable,
@@ -320,36 +334,79 @@ dev.off()
 
 ### basic PA map
 
+worldmap = ne_download(scale = 50,
+                       type = "land",
+                       category = "physical",
+                       destdir = tempdir(),
+                       load = TRUE,
+                       returnclass = "sf") %>%
+        st_transform(54030) %>%
+        st_union
+
 df = readRDS("data_processed/PA_df.RDS") %>%
-        filter(group == "main" & matched) %>%
-        mutate(cat_simple=factor(cat_simple,levels=sort(unique(df$cat_simple)),
-                                 labels=paste0(names(table(df$cat_simple))," (",table(df$cat_simple),")")))
+        dplyr::filter(group == "main" & matched)
 
-p = ggplot(df) +
-                geom_point(aes(x=long,y=lat,fill=log(GIS_AREA)), shape=21, size=1.25*0.35, stroke=1.25*0.1) +
-                facet_wrap(~ cat_simple, ncol=1) +
-                geom_sf(data=worldmap, fill=NA, color="black", size=0.2) +
-                theme_bw() +
-                theme(axis.title=element_blank(),
-                      panel.grid.major=element_blank(),
-                      axis.text=element_blank(),
-                      axis.ticks=element_blank(),
-                      plot.title=element_text(hjust=0.5),
-                      legend.position="right",
-                      legend.background=element_rect(color="black",fill="white")) +
-                scale_x_continuous(expand=c(0,0)) +
-                scale_y_continuous(limits=range(df_mod$lat), expand=c(0.05,0.05)) +
-		guides(fill = guide_colorbar(title=bquote('Area (' * km^2 * ')'))) +
-                scale_fill_gradientn(colors=viridis(50), # viridis(100),
-			breaks=log(10^(-10:10)), labels=prettyNum(10^(-10:10),big.mark=",",scientific=FALSE))
+PAs = read_sf("data_input/PAs/WDPA_Jan2020-shapefile-polygons.shp") %>%
+        filter(WDPAID %in% df$WDPAID) %>%
+        st_transform(54030) %>%
+        st_simplify(dTolerance=5000) %>%
+        mutate(cat_simple = df$cat_simple[match(WDPAID, df$WDPAID)]) %>%
+        group_by(cat_simple) %>%
+        dplyr::summarise
 
-p_non_threatened = plot_grid(plotlist=list(p_coef,p_SE,p_p_val), ncol=1, align="v")
+border = raster() %>%
+        st_bbox %>%
+        st_as_sfc %>%
+        densify(100) %>%
+        st_transform(54030)
 
-png("output/PA_pts.png", width=6.8, height=7, units="in", res=300)
+gdalwarp(srcfile="data_processed/rasters/cover.tif",
+         dstfile="data_processed/cover_low.tif",
+         t_srs="+proj=robin +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
+         tr=c(10000,10000))
+
+gdalwarp(srcfile="data_processed/rasters/cover_loss.tif",
+         dstfile="data_processed/cover_loss_low.tif",
+         t_srs="+proj=robin +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
+         tr=c(10000,10000))
+
+C = raster("data_processed/cover_low.tif")
+CL = raster("data_processed/cover_loss_low.tif")
+D = -(((C - CL)/C)^(1/18) - 1)
+D[which(D[] > 0.1)] = 0.1
+D[which(C[] < 30)] = NA
+D_pts = data.frame(rasterToPoints(D))
+
+p = ggplot() +
+        geom_raster(data=D_pts, aes(x=x,y=y,fill=100*layer)) +
+        geom_sf(data=PAs, aes(color=cat_simple), fill=NA, size=0.2, show.legend = "line") +
+        geom_sf(data=worldmap, fill=NA, color="black", size=0.2) +
+        geom_sf(data=border, fill=NA, color="black", size=0.2) +
+        scale_x_continuous(limits=st_bbox(PAs)[c(1,3)], expand=c(0.05,0.05)) +
+        scale_y_continuous(limits=st_bbox(PAs)[c(2,4)], expand=c(0.05,0.05)) +
+        scale_fill_gradientn(colors=brewer.pal(9,"Reds"),
+                             breaks=seq(0,10,length=5),
+                             labels=paste0(c(rep("",4),"≥"), seq(0,10,length=5)),
+                             guide=guide_colorbar(title="Annual\ndeforestation\nrate (%)",
+                                                  nbin=300)) +
+        scale_color_manual(values=brewer.pal(9,"Set1")[c(2,4,9)],
+                           guide=guide_legend(title="Reserve category",
+                                              override.aes=list(size=0.5))) +
+        theme_bw() +
+        theme(axis.title=element_blank(),
+                panel.grid.major=element_blank(),
+                axis.text=element_blank(),
+                axis.ticks=element_blank(),
+                plot.title=element_text(hjust=0.5),
+                legend.position=c(0,0),
+                legend.justification=c(0,0),
+                legend.background=element_rect(color="black",fill="white"))
+
+png("output/PA_map.png", width=10, height=4.5, units="in", res=300)
 p
 dev.off()
 
-pdf("output/PA_pts.pdf", width=6.8, height=7)
+pdf("output/PA_map.pdf", width=10, height=4.5)
 p
 dev.off()
 

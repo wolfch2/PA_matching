@@ -68,6 +68,7 @@ worldmap = ne_download(scale = 110,
 X = model.matrix(PA_loss ~ Control_loss + pop_dens + travel_time + age + GDP + cat_simple + GIS_AREA, data=df_mod)
 
 start = Sys.time()
+set.seed(0)
 mod = besf_vc(df_mod$PA_loss, x=X,
               coords=cbind(df_mod$lat, df_mod$long),
               covmodel="gau", # fails to run w/ "exp"!
@@ -77,6 +78,8 @@ Sys.time() - start
 # https://rdrr.io/cran/spmoran/man/besf_vc.html
 mod$s # note second row: all below 0.15 except for intercept (extremely high)
 mod$vc # everything but GDP effect was varying
+
+rbind(mod$b_vc[1,],mod$bse_vc[1,],mod$p_vc[1,]) # note results for GDP
 
 coef = mod$b_vc %>%
         data.frame(lat=df_mod$lat, long=df_mod$long) %>%
@@ -103,13 +106,14 @@ SE = mod$bse_vc %>%
 p_val = mod$p_vc %>%
         data.frame(lat=df_mod$lat, long=df_mod$long) %>%        
         select(- c(GDP, X.Intercept.)) %>%
-        melt(id.vars=c("lat","long")) %>%
+        reshape2::melt(id.vars=c("lat","long")) %>%
         mutate(variable = revalue(variable, c("Control_loss"="Background rate",
                                               "pop_dens"="Population density",
                                               "travel_time"="Travel time",
                                               "age"="Reserve age",
                                               "cat_simpleStrict"="Strict protection",
-                                              "GIS_AREA"="Reserve area")))
+                                              "GIS_AREA"="Reserve area")),
+              value = p.adjust(value,"fdr"))
 
 # https://stackoverflow.com/questions/55922441/expand-argument-in-scale-color-gradient-is-ignored
 p_ramp = c(rev(colorRampPalette(brewer.pal(9,"Blues"))(1e3)),
@@ -191,9 +195,9 @@ pdf("output/svc.pdf", width=18, height=16)
 all
 dev.off()
 
-plot_list_single = list(plot_list_small_titles[[22]] + ggtitle("Coefficient") + easy_center_title(),
-                        plot_list_small_titles[[23]] + ggtitle("Standard error") + easy_center_title(),
-                        plot_list_small_titles[[24]] + ggtitle("p-value") + easy_center_title())  # pull out category plots for main paper
+plot_list_single = list(plot_list_titles[[22]] + ggtitle("Coefficient") + easy_center_title(),
+                        plot_list_titles[[23]] + ggtitle("Standard error") + easy_center_title(),
+                        plot_list_titles[[24]] + ggtitle("p-value") + easy_center_title())  # pull out category plots for main paper
 
 single = plot_grid(plotlist=plot_list_single,ncol=1)
 
@@ -207,10 +211,12 @@ dev.off()
 
 ######################################## species richness models
 
+set.seed(0)
 mod_threatened = besf_vc(df_mod$PA_loss, x=model.matrix(PA_loss ~ Control_loss + threatened, data=df_mod),
               coords=cbind(df_mod$lat, df_mod$long),
               covmodel="gau",
               maxiter=100)
+set.seed(0)
 mod_non_threatened = besf_vc(df_mod$PA_loss, x=model.matrix(PA_loss ~ Control_loss + non_threatened, data=df_mod),
               coords=cbind(df_mod$lat, df_mod$long),
               covmodel="gau",
@@ -231,7 +237,8 @@ SE = mod_non_threatened$bse_vc %>%
         select(- c(Control_loss, X.Intercept.))
 p_val = mod_non_threatened$p_vc %>%
         data.frame(lat=df_mod$lat, long=df_mod$long) %>%
-        select(- c(Control_loss, X.Intercept.))
+        select(- c(Control_loss, X.Intercept.)) %>%
+        mutate(non_threatened=p.adjust(non_threatened,"fdr"))
 
 u = coef$non_threatened %>% range %>% abs %>% max
 
