@@ -313,42 +313,41 @@ dev.off()
 titles = c("threatened"="Threatened forest\nspecies richness",
            "non_threatened"="Non-threatened forest\nspecies richness")
 
-world_behr = st_transform(worldmap,crs(rast))
-
 plot_list = lapply(names(titles), function(rast_name){
         rast = velox(raster(paste0("data_processed/rasters/",rast_name,".tif")))
         rast$aggregate(10,aggtype="median")
         rast = rast$as.RasterLayer()
         rast[rast[] %in% 0] = NA
+        rast = projectRaster(rast, res=0.1, crs="+proj=longlat +datum=WGS84 +no_defs", method="ngb")
         pts = data.frame(rasterToPoints(rast))
-
+        
         p = ggplot(pts, aes(x=x,y=y,fill=layer)) +
                 geom_raster() +
                 scale_fill_gradientn(colors=brewer.pal(11,"Spectral"),
                                      limits=c(0,NA),
                                      guide=guide_colorbar(title=titles[rast_name],
                                                            nbin=1000)) +
-                geom_sf(data=world_behr, aes(x=NULL,y=NULL), fill=NA, color="black", size=0.2) +
+                geom_sf(data=worldmap, aes(x=NULL,y=NULL), fill=NA, color="black", size=0.2) +
                 theme_bw() +
                 theme(axis.title=element_blank(),
                       panel.grid.major=element_blank(),
                       axis.text=element_blank(),
                       axis.ticks=element_blank(),
                       plot.title=element_text(hjust=0.5),
-                      legend.position="right",
+                      legend.position=c(0,0),
+                      legend.justification=c(0,0),
                       legend.background=element_rect(color="black",fill="white")) +
-                scale_x_continuous(limits=range(pts$x), expand=c(0.05,0.05)) +
-                scale_y_continuous(limits=range(pts$y), expand=c(0.05,0.05))
+                coord_sf(xlim=c(-180,180), ylim=c(-55.95,72.75)) # extents of non-threatened
         return(p)
 })
 
 p_richness = plot_grid(plotlist=plot_list[2:1], ncol=1, align="hv")
 
-png("output/richness.png", width=6.8, height=3.85, units="in", res=400)
+png("output/richness.png", width=9.5, height=7, units="in", res=400)
 p_richness
 dev.off()
 
-pdf("output/richness.pdf", width=6.8, height=3.85)
+pdf("output/richness.pdf", width=9.5, height=7)
 p_richness
 dev.off()
 

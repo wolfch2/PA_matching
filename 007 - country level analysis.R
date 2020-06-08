@@ -126,9 +126,10 @@ saveRDS(countries_sf, "temp/countries_sf.RDS")
 countries_sf = readRDS("temp/countries_sf.RDS")
 
 country_data = countries_sf %>%
-        filter(n >= 50 & total >= 15 & area_forest >= 100^2)
+        filter(n >= 15 & total >= 5 & area_forest >= 100^2)
 
 cor(country_data$protected, country_data$protected_raw) # 0.54 (paper text)
+cor(country_data$total, country_data$log_carbon) # 0.37 (paper text)
 
 ##################### mapping etc.
 
@@ -144,7 +145,7 @@ ex = st_bbox(country_data_robin)
 ##################### total (adjusted)
 
 col_mult_adj = max(country_data$total)/max(country_data$protected) # for color scale
-brks = c(100,1000,2500,10000)
+brks = c(100,1000,10000)
 
 bg_adj = expand.grid(protected=seq(0,
 	                           1.05*max(country_data$protected,na.rm=TRUE),
@@ -174,6 +175,7 @@ p_bot = ggplot() +
               panel.grid.minor=element_blank(),
               legend.position="bottom",
               legend.key.width=unit(2.5,"lines"),
+              legend.margin=margin(3,11,3,3),
               legend.background = element_rect(fill=NULL,color="black")) +
 	guides(fill=guide_colorbar(title="Adjusted threat  \nindex", nbin=300))
 
@@ -193,10 +195,9 @@ p_top = ggplot(country_data, aes(y=total,x=protected)) +
 	scale_y_continuous(expand=c(0,0)) +
 	ylab("Number of forest vertebrates") +
 	guides(fill=FALSE) +
-        geom_text_repel(aes(label=NAME),
-                        size=3,
-                        nudge_y = 10.5 * (country_data$NAME == "Japan"),
-                        nudge_x = 0.05 * (country_data$NAME == "South Korea"))
+        geom_text_repel(data = country_data[country_data$total >= 300 | country_data$protected > 1.5,],
+                        aes(label=NAME),
+                        size=3)
 
 all = plot_grid(p_top, p_bot, ncol=1, labels=c("A.","B."), rel_heights=c(2,1.5), hjust=0)
 

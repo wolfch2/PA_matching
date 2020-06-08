@@ -167,10 +167,8 @@ df_small$variable = factor(df_small$variable,
 df_small$Continent = factor(df_small$Continent, levels=unique(rev(c("Developed","Developing",sort(unique(df$Continent))))))
 df_small$gp = paste(df_small$Continent,df_small$variable,df_small$cat_simple)
 
-# TODO NOTE - has G-L instead of L-G in Julia script... after fix won't need to negate!
-# Also, better to do C/100 in Julia instead of 100*100, I think.
 p = ggplot(df_small[table(df_small$gp)[df_small$gp] >= 10 & df_small$cat_simple != "Unknown",],
-           aes(x=Continent, y=-100*100*value, color=variable, shape=variable)) +
+           aes(x=Continent, y=100*value, color=variable, shape=variable)) +
 	stat_summary(fun.data = quants, geom = "errorbar",
 		position=position_dodge(width=2/3),width=0) +
 	stat_summary(fun.y=median, geom = "point",position=position_dodge(width=2/3)) +
@@ -328,6 +326,26 @@ png("output/loss_hist.png", width=6.5, height=6.5, units="in", res=300)
 p
 dev.off()
 
+p = ggplot(df, aes(x=100*value,y=..count..)) +
+	geom_histogram(boundary=0,color="black",fill="lightgray") +
+	facet_grid(cat_simple ~ variable, scales="free_y") +
+	ylab("Count") +
+	xlab("Annual deforestation rate (%)") +
+	theme_bw() +
+	theme(axis.text=element_text(color="black"),
+		legend.background=element_rect(color="black"),
+		legend.position="bottom") +
+	guides(fill=guide_legend(title=element_blank(), nrow=1)) +
+        scale_x_continuous(trans="log1p", labels = fmt_dcimals(0), limits=c(0,5), breaks=c(0,1,2,5,10,25,50,100))
+
+pdf("output/loss_hist_bw.pdf", width=6.5, height=6.5)
+p
+dev.off()
+
+png("output/loss_hist_bw.png", width=6.5, height=6.5, units="in", res=300)
+p
+dev.off()
+
 # paper text
 100*tapply(df$value, df$variable, median)
 100*tapply(df$value, df$variable, mean)
@@ -351,8 +369,9 @@ PAs = read_sf("data_input/PAs/WDPA_Jan2020-shapefile-polygons.shp") %>%
         st_transform(54030) %>%
         st_simplify(dTolerance=5000) %>%
         mutate(cat_simple = df$cat_simple[match(WDPAID, df$WDPAID)]) %>%
-        group_by(cat_simple) %>%
-        dplyr::summarise
+        group_by(cat_simple)
+
+PAs = dplyr::summarise(PAs) # had issues with piping
 
 border = raster() %>%
         st_bbox %>%
@@ -377,9 +396,28 @@ D[which(D[] > 0.1)] = 0.1
 D[which(C[] < 30)] = NA
 D_pts = data.frame(rasterToPoints(D))
 
-p = ggplot() +
+p_top = ggplot() +
+        geom_sf(data=PAs, aes(fill=cat_simple), color=NA) +
+        geom_sf(data=worldmap, fill=NA, color="black", size=0.2) +
+        geom_sf(data=border, fill=NA, color="black", size=0.2) +
+        scale_x_continuous(limits=st_bbox(PAs)[c(1,3)], expand=c(0.05,0.05)) +
+        scale_y_continuous(limits=st_bbox(PAs)[c(2,4)], expand=c(0.05,0.05)) +
+        scale_fill_manual(values=brewer.pal(9,"Set1")[c(2,4,9)],
+                           guide=guide_legend(title="Reserve category",
+                                              override.aes=list(color="black"))) +
+        theme_bw() +
+        theme(axis.title=element_blank(),
+                panel.grid.major=element_blank(),
+                axis.text=element_blank(),
+                axis.ticks=element_blank(),
+                plot.margin=margin(5,2,5,23),
+                plot.title=element_text(hjust=0.5),
+                legend.position=c(0,0),
+                legend.justification=c(0,0),
+                legend.background=element_rect(color="black",fill="white"))
+
+p_bot = ggplot() +
         geom_raster(data=D_pts, aes(x=x,y=y,fill=100*layer)) +
-        geom_sf(data=PAs, aes(color=cat_simple), fill=NA, size=0.2, show.legend = "line") +
         geom_sf(data=worldmap, fill=NA, color="black", size=0.2) +
         geom_sf(data=border, fill=NA, color="black", size=0.2) +
         scale_x_continuous(limits=st_bbox(PAs)[c(1,3)], expand=c(0.05,0.05)) +
@@ -389,24 +427,24 @@ p = ggplot() +
                              labels=paste0(c(rep("",4),"≥"), seq(0,10,length=5)),
                              guide=guide_colorbar(title="Annual\ndeforestation\nrate (%)",
                                                   nbin=300)) +
-        scale_color_manual(values=brewer.pal(9,"Set1")[c(2,4,9)],
-                           guide=guide_legend(title="Reserve category",
-                                              override.aes=list(size=0.5))) +
         theme_bw() +
         theme(axis.title=element_blank(),
                 panel.grid.major=element_blank(),
                 axis.text=element_blank(),
                 axis.ticks=element_blank(),
+                plot.margin=margin(5,2,5,23),                
                 plot.title=element_text(hjust=0.5),
                 legend.position=c(0,0),
                 legend.justification=c(0,0),
                 legend.background=element_rect(color="black",fill="white"))
 
-png("output/PA_map.png", width=10, height=4.5, units="in", res=300)
-p
+all = plot_grid(p_top, p_bot, ncol=1, labels=c("A.","B."))
+
+png("output/PA_map.png", width=.9*10, height=.9*9, units="in", res=300)
+all
 dev.off()
 
-pdf("output/PA_map.pdf", width=10, height=4.5)
-p
+pdf("output/PA_map.pdf", width=.9*10, height=.9*9)
+all
 dev.off()
 
