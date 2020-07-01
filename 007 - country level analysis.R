@@ -53,7 +53,6 @@ countries_sf = ne_load(scale = 10, # use ne_download first time
                        type = "countries",
                        category = "cultural",
                        destdir = tempdir(),
-                       #load = TRUE,
                        returnclass = "sf")
 countries_sf$ID = 1:nrow(countries_sf)
 
@@ -162,7 +161,7 @@ p_bot = ggplot() +
 	geom_sf(data=countries_sf, fill=NA, colour="black", size=0.05) +	
 	theme_bw() +
 	coord_sf(xlim=ex[c(1,3)], ylim=ex[c(2,4)]) +
-	scale_fill_gradientn(colours=viridis(50),
+	scale_fill_gradientn(colours=plasma(50)[15:50],
                              breaks=atan(brks/col_mult_adj),
                              labels=brks,
                              limits=col_lim) +
@@ -182,7 +181,7 @@ p_bot = ggplot() +
 p_top = ggplot(country_data, aes(y=total,x=protected)) +
 	geom_raster(data=bg_adj, aes(fill=atan(adj_threat/col_mult_adj))) +
 	geom_point() +
-	scale_fill_gradientn(colours=viridis(50),
+	scale_fill_gradientn(colours=plasma(50)[15:50],
                              breaks=atan(brks/col_mult_adj),
                              labels=brks,
                              limits=col_lim) +
@@ -229,7 +228,7 @@ col_lim = atan(range(bg_adj$adj_loss)/col_mult_adj_left)
 p_left = ggplot(country_data, aes(y=loss,x=protected)) +
 	geom_raster(data=bg_adj, aes(fill=atan(adj_loss/col_mult_adj_left))) +
 	geom_point() +
-	scale_fill_gradientn(colours=viridis(50),
+	scale_fill_gradientn(colours=plasma(50)[15:50],
                              breaks=atan(brks/col_mult_adj_left),
                              labels=brks,
                              limits=col_lim) +
@@ -242,7 +241,7 @@ p_left = ggplot(country_data, aes(y=loss,x=protected)) +
 	scale_x_continuous(expand=c(0,0)) +
 	scale_y_continuous(expand=c(0,0)) +
 	ylab("Annual deforestation rate (%)") +
-        geom_text_repel(aes(label=NAME)) +
+        geom_text_repel(data=country_data[country_data$loss > 0.017 | country_data$protected > 1,], aes(label=NAME)) +
 	guides(fill=guide_colorbar(title="Adjusted threat  \nindex (forest loss)", nbin=300))
 
 ###
@@ -263,7 +262,7 @@ col_lim = atan(range(bg_adj$adj_carbon)/col_mult_adj_right)
 p_right = ggplot(country_data, aes(y=log_carbon,x=protected)) +
 	geom_raster(data=bg_adj, aes(fill=atan(adj_carbon/col_mult_adj_right))) +
 	geom_point() +
-	scale_fill_gradientn(colours=viridis(50),
+	scale_fill_gradientn(colours=plasma(50)[15:50],
                              breaks=atan(brks/col_mult_adj_right),
                              labels=brks,
                              limits=col_lim) +
@@ -276,7 +275,8 @@ p_right = ggplot(country_data, aes(y=log_carbon,x=protected)) +
 	scale_x_continuous(expand=c(0,0)) +
 	scale_y_continuous(expand=c(0,0)) +
 	ylab("Total aboveground forest carbon (gt)") +
-        geom_text_repel(aes(label=NAME)) +
+        geom_text_repel(data=country_data[country_data$log_carbon < 8.2 | 
+                        country_data$log_carbon > 10 | country_data$protected > 1,], aes(label=NAME)) +
 	guides(fill=guide_colorbar(title="Adjusted threat  \nindex (carbon)", nbin=300))
 
 all = plot_grid(p_left, p_right, ncol=2, labels=c("A.","B."))

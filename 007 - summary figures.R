@@ -64,7 +64,7 @@ cover = raster("data_processed/rasters/cover.tif") %>%
 PA_rast = read_sf("data_input/PAs/WDPA_Jan2020-shapefile-polygons.shp") %>%
         dplyr::filter(STATUS != "Proposed") %>%
         st_transform(st_crs(cover)) %>%
-        fasterize(PAs, cover)
+        fasterize(cover)
 
 tab = table(cover[] >= 30, PA_rast[], useNA="always")
 prop.table(tab,1) # 15.7% of forest is protected
@@ -99,12 +99,12 @@ median(inside)
 sd(inside)
 median(outside)/median(inside)
 
-######################################## summary figures
+######################################## summary figureumber of protected or control areass
 
 developed = df[df$developed,]
-developed$Continent = "Developed"
+developed$Continent = "Higher GDP"
 developing = df[! df$developed,]
-developing$Continent = "Developing"
+developing$Continent = "Lower GDP"
 df_dev = rbind(df, developed, developing)
 
 ### main comparison (boxplot) (UPDATED)
@@ -113,7 +113,7 @@ df_small = reshape2::melt(df_dev, measure.vars=c("PA_loss","Control_loss"))
 df_small$variable = factor(df_small$variable,
 	levels=rev(c("PA_loss","Control_loss")),
 	labels=rev(c("PA deforestation rate","Control deforestation rate")))
-df_small$Continent = factor(df_small$Continent, levels=unique(rev(c("Developed","Developing",sort(unique(df$Continent))))))
+df_small$Continent = factor(df_small$Continent, levels=unique(rev(c("Higher GDP","Lower GDP",sort(unique(df$Continent))))))
 df_small$gp = paste(df_small$Continent,df_small$variable,df_small$cat_simple)
 
 # paper text
@@ -164,7 +164,7 @@ df_small = melt(df_dev, measure.vars=c("PA_loss_gain","Control_loss_gain"))
 df_small$variable = factor(df_small$variable,
 	levels=rev(c("PA_loss_gain","Control_loss_gain")),
 	labels=rev(c("Net forest loss inside PA","Net forest loss inside control pixels")))
-df_small$Continent = factor(df_small$Continent, levels=unique(rev(c("Developed","Developing",sort(unique(df$Continent))))))
+df_small$Continent = factor(df_small$Continent, levels=unique(rev(c("Higher GDP","Lower GDP",sort(unique(df$Continent))))))
 df_small$gp = paste(df_small$Continent,df_small$variable,df_small$cat_simple)
 
 p = ggplot(df_small[table(df_small$gp)[df_small$gp] >= 10 & df_small$cat_simple != "Unknown",],
@@ -207,13 +207,13 @@ df = readRDS("data_processed/PA_df.RDS") %>%
                                  levels=rev(c("loss_delta_inside","loss_delta_outside")),
 	                         labels=rev(c("Protected areas","Control areas"))),
                Continent = factor(Continent,
-                                  levels=unique(rev(c("Developed","Developing",sort(unique(Continent)))))),
+                                  levels=unique(rev(c("Higher GDP","Lower GDP",sort(unique(Continent)))))),
                gp = paste(Continent,variable,cat_simple))
 
 developed = df[df$developed,]
-developed$Continent = "Developed"
+developed$Continent = "Higher GDP"
 developing = df[! df$developed,]
-developing$Continent = "Developing"
+developing$Continent = "Lower GDP"
 df_small = rbind(df, developed, developing)
 
 p = ggplot(df_small[table(df_small$gp)[df_small$gp] >= 10 & df_small$cat_simple != "Unknown",],
@@ -329,7 +329,7 @@ dev.off()
 p = ggplot(df, aes(x=100*value,y=..count..)) +
 	geom_histogram(boundary=0,color="black",fill="lightgray") +
 	facet_grid(cat_simple ~ variable, scales="free_y") +
-	ylab("Count") +
+	ylab("Number of protected or control areas") +
 	xlab("Annual deforestation rate (%)") +
 	theme_bw() +
 	theme(axis.text=element_text(color="black"),
