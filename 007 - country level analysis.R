@@ -213,7 +213,7 @@ dev.off()
 # https://stackoverflow.com/questions/49183067/trying-to-make-a-list-of-ggplot-objects-in-a-for-loop-all-items-in-list-are-wri
 
 col_mult_adj_left = max(country_data$loss)/max(country_data$protected) # for color scale
-brks = c(0.01,0.03,0.07,1)
+brks = c(0.001,0.01,1)
 
 bg_adj = expand.grid(protected=seq(0,
 	                           1.05*max(country_data$protected,na.rm=TRUE),
@@ -247,7 +247,7 @@ p_left = ggplot(country_data, aes(y=loss,x=protected)) +
 ###
 
 col_mult_adj_right = max(country_data$log_carbon)/max(country_data$protected) # for color scale
-brks = c(15,25,50,100)
+brks = c(5,10,100)
 
 bg_adj = expand.grid(protected=seq(0,
 	                           1.05*max(country_data$protected,na.rm=TRUE),

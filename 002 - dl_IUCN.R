@@ -15,7 +15,7 @@ require(gdalUtils)
 
 setwd("/home/chrisgraywolf/analysis_desktop/PA_matching/")
 
-token = "1f6e9566aa509bcf87bdecb32901e1a7f53d04785749d6afe3db9b3b5b043002"
+token = "put_your_token_here"
 
 ######################################################## get species
 
