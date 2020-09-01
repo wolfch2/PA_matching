@@ -102,7 +102,7 @@ function L1_imbalance(df)
         n_control = sum(df.treatment .== 0)
         n_treatment = sum(df.treatment .== 1)
 
-        summary_gp = by(df, setdiff(names(df), [:treatment])) do df_small
+        summary_gp = by(df, setdiff(names(df), ["treatment"])) do df_small # names(df) now returns list of strings, not symbols!
                 abs(sum(df_small.treatment .== 0) / n_control - sum(df_small.treatment .== 1) / n_treatment)
         end
 
@@ -127,23 +127,31 @@ function CEM(data_treatment, data_control)
         ############# aside: check L1 imbalance
         data_all_coarsened_auto = coarsen_df(data_all, coarsen, "uniform", 10)
         L1_imbalance(data_all_coarsened_auto[!,vcat(:treatment, match)]) # 0.879 (high imbalance)
-        #
-        data_all.cover_original = deepcopy(data_all.cover) # "matching" variable that must be coarsened and isneeded for loss calc.
+        #############
+        data_original = deepcopy(data_all[!,coarsen]) # needed for diagnostics; cover also needed for loss calc
+        rename!(data_original, names(data_original) .* "_original")
+        data_all = hcat(data_all, data_original)
         ############# now perform 1-k matching by iterating over the PA cells
         data_all_coarsened = coarsen_df(data_all, coarsen)
-        data_control_coarsened = data_all_coarsened[data_all_coarsened.treatment .== 0,setdiff(names(data_all_coarsened),[:PAs,:STATUS_YR])]
+        data_control_coarsened = data_all_coarsened[data_all_coarsened.treatment .== 0,setdiff(names(data_all_coarsened),["PAs","STATUS_YR"])]
         data_treatment_coarsened = data_all_coarsened[data_all_coarsened.treatment .== 1,:]
-        data_matched = join(data_treatment_coarsened[!,vcat(:PAs,:STATUS_YR,match)], data_control_coarsened, on = match, kind = :inner)
+        data_matched = join(data_treatment_coarsened[!,vcat(:PAs,:STATUS_YR,match)], data_control_coarsened, on = match, kind = :inner) # key matching step
         data_matched.cover = deepcopy(data_matched.cover_original) # non-coarsened version (for calculating loss rates)
-        data_matched = by(data_matched, :PAs) do df_small
+        data_matched = by(data_matched, :PAs) do df_small # for each PA, want to calculate deforestation rate in the control pixels, etc.
                 out = float.(DataFrame(df_small[1,:]))
                 out = hcat(out, deforestation_calc(df_small, df_small.STATUS_YR[1], "Control_"))
                 out[:,:n_control] .= length(df_small.loss)
+                for var in names(data_original) # add control region means (for diagnostics)
+                        out[:,var] = mean(df_small[:,var])
+                end
                 return out
-        end
+        end # note: cover_original becomes spikey because we are averaging.
+        # For example, see histogram(data_matched[data_matched.PAs .== 56624,:].cover_original)
+        # cover must be in same 20% bracket, then we avg...
        ############# do a final join with original data_treatment and the control loss vars!
-        out = join(data_treatment, 
-                   data_matched[:,[:PAs, :Control_loss, :Control_loss_before, :Control_loss_after, :Control_loss_gain, :n_control]],
+        out = join(data_treatment,  # has non-coarsened treatment covariates
+                   data_matched[:,vcat([:PAs, :Control_loss, :Control_loss_before,
+                                   :Control_loss_after, :Control_loss_gain, :n_control], Symbol.(names(data_original)))], # has matched info
                    on = :PAs,
                    kind = :left)
         return out

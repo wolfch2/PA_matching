@@ -49,6 +49,45 @@ setwd(project_dir)
 
 df = readRDS("data_processed/PA_df.RDS")
 
+######################################## matching method diagnostics
+
+vars = c("elev","slope","cover","travel_time","pop_dens")
+df_diag = df[df$matched, c("PAs",vars,paste0(vars,"_original"))]
+
+sapply(vars, function(var){
+        treatment = df_diag[,var]
+        control = df_diag[,paste0(var,"_original")]
+        abs(mean(treatment) - mean(control)) / sd(treatment)
+}) # absolute standardized differences in means (max is 0.04, which is less than 0.25)
+
+df_long = foreach(var=vars, .combine="rbind") %do%{
+        data.frame(var=var,treatment=df_diag[,var],control=df_diag[,paste0(var,"_original")])
+}
+#        elev       slope       cover travel_time    pop_dens 
+# 0.029018681 0.003622649 0.016805110 0.011957961 0.038442931
+
+df_long = df_long %>%
+        mutate(variable = revalue(var, c("elev"="Elevation (meters)",
+                                              "slope"="Slope (degrees)",
+                                              "cover"="Tree cover (%)",
+                                              "travel_time"="Travel time (minutes)",
+                                              "pop_dens"="Population density (per sq. km)")))
+
+p = ggplot(df_long, aes(x=treatment,y=control)) +
+        geom_point(alpha = 0.1) +
+        facet_wrap(~ variable, scales="free") +
+        theme_bw() +
+        theme(axis.text=element_text(color="black"),
+              axis.ticks=element_line(color="black"),
+              panel.border=element_rect(color="black"),
+              aspect.ratio=1) +
+        xlab("Treatment value") +
+        ylab("Control value")
+
+png("output/diag_scatter.png", width=7, height=5, units="in", res=300)
+p
+dev.off()
+
 ######################################## numbers for paper text
 
 ### overall totals and proportions

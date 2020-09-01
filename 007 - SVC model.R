@@ -41,8 +41,6 @@ setwd(project_dir)
 
 ######################################## set up data
 
-# NEED TO DROP BIOS RESERVE ETC, MAYBE UNKNOWN TOO
-
 df_mod = readRDS("data_processed/PA_df.RDS") %>%
         filter(matched) %>%
         filter(group == "main") %>%
