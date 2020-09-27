@@ -74,7 +74,7 @@ mod = besf_vc(df_mod$PA_loss, x=X,
 Sys.time() - start
 
 # https://rdrr.io/cran/spmoran/man/besf_vc.html
-mod$s # note second row: all below 0.15 except for intercept (extremely high)
+mod$s
 mod$vc # everything but GDP effect was varying
 
 rbind(mod$b_vc[1,],mod$bse_vc[1,],mod$p_vc[1,]) # note results for GDP

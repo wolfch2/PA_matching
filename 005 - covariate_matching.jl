@@ -88,7 +88,10 @@ function coarsen_df(df_original, vars=[], method="quantile", n_class=5)
         for col in vars # can prefix w/ Threads.@threads
                 print(col)
                 if method == "quantile" # DiscretizeUniformCount doesn't handle ties well (extremely slow and often fails...)
-                        df[:,col] = encode(LinearDiscretizer(quantile(float(df[:,col]), Array(0:1/n_class:1))), float(df[:,col]))
+                        # update: just use unique elements from quantile vector (travel_time, for example, can only handle 5 classes)
+                        breaks = quantile(float(df[:,col]), Array(0:1/n_class:1)) |> unique
+                        print(length(breaks))
+                        df[:,col] = encode(LinearDiscretizer(breaks), float(df[:,col]))
                 elseif method == "uniform"
                         df[:,col] = encode(LinearDiscretizer(binedges(DiscretizeUniformWidth(n_class), float(df[:,col]))), float(df[:,col]))
                 elseif method == "uniform_auto"
@@ -111,7 +114,7 @@ end
 
 # perform 1-to-k coarsened exact matching (TODO - add response_var arg etc.).  That is, match,
 # calculate loss rates for control pixels, then join to original treatment dataframe!
-function CEM(data_treatment, data_control)
+function CEM(data_treatment, data_control, n_class=5)
         ############# basic setup - add treatment variable and combine
         coarsen = [:elev, :slope, :cover, :travel_time, :pop_dens] # variables that must be coarsened        
         match = [:elev, :slope, :cover, :travel_time, :pop_dens, :countries, :ecoregions, :drivers] # variables to use for CEM
@@ -132,7 +135,7 @@ function CEM(data_treatment, data_control)
         rename!(data_original, names(data_original) .* "_original")
         data_all = hcat(data_all, data_original)
         ############# now perform 1-k matching by iterating over the PA cells
-        data_all_coarsened = coarsen_df(data_all, coarsen)
+        data_all_coarsened = coarsen_df(data_all, coarsen, "quantile", n_class)
         data_control_coarsened = data_all_coarsened[data_all_coarsened.treatment .== 0,setdiff(names(data_all_coarsened),["PAs","STATUS_YR"])]
         data_treatment_coarsened = data_all_coarsened[data_all_coarsened.treatment .== 1,:]
         data_matched = join(data_treatment_coarsened[!,vcat(:PAs,:STATUS_YR,match)], data_control_coarsened, on = match, kind = :inner) # key matching step
@@ -187,7 +190,8 @@ data_control = full[full.PAs .== minimum(full.PAs),:]
 
 ################################ run CEM and export
 
-data_matched = CEM(data_treatment, data_control) # add control_loss
+#data_matched = CEM(data_treatment, data_control) # add control_loss
+#CSV.write("data_processed/data_matched.csv", data_matched)
 
-CSV.write("data_processed/data_matched.csv", data_matched)
-
+data_matched = CEM(data_treatment, data_control, 10) # add control_loss - sensitivity analysis w/ 10 classes
+CSV.write("data_processed/data_matched_10_class.csv", data_matched)
