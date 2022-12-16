@@ -1,0 +1,27 @@
+---
+title: "Pre-analysis plan for the replication of Wolf et al. (2021)"
+author: "Florent Bédécarrats, Marc Bouvier, Marin Ferry, Jeanne de Montalembert"
+format: html
+editor: visual
+bibliography: references.bib
+---
+
+We intend to run a replication of the paper published by Wolf and colleagues in *Nature Ecology & Evolution* in 2021 [@wolf2021]. In this document, we lay out with the analysis steps we plan to carry out before starting any analysis. This has two main objectives:
+
+1.  help the replication authors to agree with anticipation on the study process; and
+
+2.  demonstrate to the journal reviewers, original study authors and future readers that the replication authors did not engage in any specification searching behavior.
+
+Following scientific good practices, we pre-specify the replication procedure we anticipate applying and we register this pre-specification in Github, a platform ensuring the traceability of documents, code and data that is commonly used, among other areas, in econometrics and geospatial analysis [@vitolo2015]. This submission is at the very beginning of the replication process, that is, before running any actual data analysis. These are the step we plan to follow:
+
+-   Reproduce the analysis implemented by Wolf et al. on the 2001-2018 GFC data and validate that we obtain the same result. This aims at verifying that the published analytical procedure indeed produces the published results.
+
+-   Reproduce the analysis implemented by Wolf et al. on the 2001-2018 GFC, replacing in one country (Madagascar) the WDPA data by another, more reliable source, and verify if the results still hold for this country. We noticed in a previous work on Madagascar that the WDPA database is incomplete and includes inaccurate geometries and attributes for several protected areas [@bédécarrats2022]. We believe that errors or missing information in the data reported to WDPA might be correlated with the protected areas management quality and, therefore, with protected areas outcomes such as deforestation. This test aims at verifying the use of a source lacking reliability on the treatment (such as WDPA in the case of Madagascar) might have lead the researchers to come to biased conclusions.
+
+-   Reproduce the analysis implemented by Wolf et al. with the most recent available GFC data (2001-2021, or 2001-2022 if available). This aims at verifying that the effects observed by Wolf et al. remain valid after the study period.
+
+-   Reproduce the analysis implemented by Wolf et al., replacing the 2001-2018 GFC by the JRC tropical moist forest dataset. The TMF dataset is allegedly more reliable: it was developed 8 years after the first disclosure of the GFC data and provides some enhancements: it covers a larger period of time (starting in 1990) and it differentiates, within forest cover loss, between deforestation and forest degradation.
+
+This document might be updated after its initial registry on Github. Every detail of any subsequent modification will be systematically and automatically recorded and time-stamped on Github, enabling anyone to access the detailed history of modification.
+
+## References
