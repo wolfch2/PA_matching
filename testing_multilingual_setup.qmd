@@ -1,0 +1,34 @@
+---
+title: "Testing multilingual setup"
+format: html
+editor: visual
+---
+
+This document just aims at checking weather the local setup can
+
+## Testing R
+
+```{r}
+1 + 1
+```
+
+## Testing python 
+
+Needs reticulate (already installed here).
+
+```{python}
+1 + 1
+```
+
+## Testing Julia
+
+```{r}
+install.packages("JuliaCall")
+library(JuliaCall)
+install_julia()
+```
+
+```{julia}
+ 1 + 1
+
+```
