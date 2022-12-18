@@ -1,0 +1,45 @@
+---
+title: 'Replication of Wolf et al. 2021 : "as is" version'
+author: "Florent Bédécarrats"
+editor: visual
+format:
+  html: 
+    code-fold: true
+execute:
+  warning: false
+  error: false
+---
+
+## Introduction
+
+Wolf et al. "Code availability" section states: "Analysis code is available at <https://github.com/wolfch2/PA_matching>." As the the words composing this link address indicate, it refers to a code repository called "PA_matching" hosted on github, created by the user with the identification "wolfch2".
+
+The corresponding github repository contains the following files:
+
+```{r}
+library(httr)
+library(tidyverse)
+
+req <- GET("https://api.github.com/repos/wolfch2/PA_matching/git/trees/master?recursive=1")
+filelist <- unlist(lapply(content(req)$tree, "[", "path"), use.names = F)
+cat(filelist, sep = "\n")
+```
+
+To assess the reproducibility of this series of code files, we create a copy ("clone" in Github) of this repository at: [https://github.com/fBedecarrats/PA_matching](https://github.com/fBedecarrats/PA_matching).
+
+## Retrieve data from Google earth engine
+
+Display the content of the first file.
+
+::: {.callout-code collapse="true"}
+
+```{r}
+#| echo: false
+#| warning: false
+#| class-output: "sourceCode python"
+
+cat(readLines("001 - dl_GEE.py"), sep = "\n")
+```
+:::
+
+
