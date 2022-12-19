@@ -2,9 +2,43 @@
 title: "Testing multilingual setup"
 format: html
 editor: visual
+editor_options: 
+  chunk_output_type: console
 ---
 
 This document just aims at checking weather the local setup can
+
+## Set up
+
+First we install all R dependencies that might be required
+
+```{r}
+required_packages <- c( # List all required R packages
+  "reticulate", # To interact with python (normally installed with Quarto)
+  "JuliaCall", # To interact with Julia 
+  "tidyverse") # To facilitate data manipulation in R
+# Install R packages that might be missing
+missing <- !(required_packages %in% installed.packages())
+
+# Install 
+if(any(missing)) install.packages(required_packages[missing])
+```
+
+Then we test if the required dependencies in python are included.
+Installing Google Cloud CLI is required, see : [https://cloud.google.com/sdk/docs/install](https://cloud.google.com/sdk/docs/install)
+
+```{r}
+library(reticulate)
+conda_create("replication-wolf")
+conda_install(envname = "replication-wolf", 
+              packages = c("earthengine-api",
+                           "rasterio",
+                           "pandas",
+                           "pydrive"))
+```
+
+
+
 
 ## Testing R
 
@@ -12,7 +46,7 @@ This document just aims at checking weather the local setup can
 1 + 1
 ```
 
-## Testing python 
+## Testing python
 
 Needs reticulate (already installed here).
 

@@ -8,6 +8,8 @@ format:
 execute:
   warning: false
   error: false
+editor_options: 
+  chunk_output_type: console
 ---
 
 ## Introduction
@@ -42,4 +44,11 @@ cat(readLines("001 - dl_GEE.py"), sep = "\n")
 ```
 :::
 
+Require a series of previous steps.
+
+```{r}
+library(reticulate)
+use_condaenv("replication-wolf")
+
+```
 
