@@ -6,26 +6,101 @@ editor_options:
   chunk_output_type: console
 ---
 
-This document just aims at checking weather the local setup can
+The code used by Wolf and colleagues to obtain their results and published on Github mixes three different coding languages: python, R and Julia. Moreover, although the code is generally clearly written and includes some explanatory comments, several adjustments in the code are required to enable it to run on a different machine. This document provides a technical procedure to enable the reproducibility of the computations shared by Wolf and colleagues.
 
-## Set up
+## Technical environment
 
-First we install all R dependencies that might be required
+It is possible to combine different programming languages in statistical computing environments such as Jupyter or RMarkdown, or its new generation Quarto. We decided to use Quarto because of its versatility and our familiarity of this tool.
+
+Quarto can be obtained at www.quarto.org.
+
+Requires Linux or a Windows machine running WSL, otherwise a strong rewriting of some files is needed. We run it on a Windows personal computer.
+
+## Prerequisites
+
+### Google services
+
+Have a gmail account to access google services Google Earth Engine and Google Drive.
+
+### wget
+
+The code requires a working installation of Wget. Wget comes with linux platform and can be installed on MAC. On Windows, it requires Windows Subsystem for Linux.
+
+## Set up R
+
+We install all R dependencies that might be required
 
 ```{r}
+
+# Install from Github --------------------------------------------------------
+
+# Some packages need to be installed from developper sources because there are
+# not available or official sources have some issues.
+# Installing version 1.3.5 which is the last working version apparently
+remotes::install_github("https://github.com/cran/doMC/tree/fbea362b96cc4469deb6065ff9fbd5d4794ccac1")
+remotes::install_github("https://github.com/cran/gdalUtils")
+remotes::install_github("jonocarroll/ggeasy")
+
+# Install from CRAN ------------------------------------------------------------
+
+# These packages are available from the usual source from R
 required_packages <- c( # List all required R packages
   "reticulate", # To interact with python (normally installed with Quarto)
   "JuliaCall", # To interact with Julia 
-  "tidyverse") # To facilitate data manipulation in R
-# Install R packages that might be missing
+  "tidyverse", # To facilitate data manipulation
+  # All packages below are used in Wolf and al. code files:
+  "countrycode",
+  "cowplot",
+  "data.table",
+  "dtplyr",
+  "fasterize",
+  "foreach",
+  "foreign",
+  "ggforce",
+  "ggplot2",
+  "ggrepel",
+  "GpGp",
+  "grid",
+  "jsonlite",
+  "landscapetools",
+  "lme4",
+  "MCMC.OTU",
+  "ncdf4",
+  "parallel",
+  "pbapply",
+  "plyr",
+  "raster",
+  "rasterVis",
+  "rbounds",
+  "RColorBrewer",
+  "RCurl",
+  "readr",
+  "reshape2",
+  "rgdal",
+  "rjson",
+  "rnaturalearth",
+  "scales",
+  "sf",
+  "smoothr",
+  "spaMM",
+  "spgwr",
+  "spmoran",
+  "spNNGP",
+  "stars",
+  "stringr",
+  "tidyverse",
+  "unix",
+  "velox",
+  "viridis",
+  "wbstats") 
 missing <- !(required_packages %in% installed.packages())
 
 # Install 
 if(any(missing)) install.packages(required_packages[missing])
 ```
 
-Then we test if the required dependencies in python are included.
-Installing Google Cloud CLI is required, see : [https://cloud.google.com/sdk/docs/install](https://cloud.google.com/sdk/docs/install)
+
+## Set up python
 
 ```{r}
 library(reticulate)
@@ -34,9 +109,105 @@ conda_install(envname = "replication-wolf",
               packages = c("earthengine-api",
                            "rasterio",
                            "pandas",
-                           "pydrive"))
+                           "pydrive",
+                           "fiona",
+                           "geojson",
+                           "geopandas",
+                           "matplotlib",
+                           "psutil",
+                           "ray",
+                           "shapely",
+                           "dbfread",
+                           "osgeo",
+                           "pyproj"))
 ```
 
+Create an authorization
+
+```{python}
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
+
+gauth = GoogleAuth()
+# Try to load saved client credentials
+gauth.LoadCredentialsFile("mycreds.txt")
+if gauth.credentials is None:
+    # Authenticate if they're not there
+    gauth.LocalWebserverAuth()
+elif gauth.access_token_expired:
+    # Refresh them if expired
+    gauth.Refresh()
+else:
+    # Initialize the saved creds
+    gauth.Authorize()
+# Save the current credentials to a file
+gauth.SaveCredentialsFile("mycreds.txt")
+```
+
+## Set up Julia
+
+First we install or set-up Julia from R if needed.
+
+```{r}
+library(JuliaCall)
+# Install or set up julia if needed
+julia_setup()
+```
+
+We also install the packages used in the code of Wolf et al.
+
+```{julia}
+using Pkg
+Pkg.add("ArchGDAL")
+Pkg.add("DataFrames")
+Pkg.add("Discretizers")
+Pkg.add("Shapefile")
+Pkg.add("FreqTables")
+Pkg.add("Plots")
+Pkg.add("StatsBase")
+Pkg.add("CSV")
+Pkg.add("LibGEOS")
+```
+
+## Harmonize paths
+
+### Make code paths generic
+
+```{r} 
+library(tidyverse)
+
+replace_all <- function(x, pattern, replacement) {
+  print(x)
+  readLines(x) %>%
+    str_replace_all(pattern, replacement) %>%
+    writeLines(x)
+}
+
+list.files(pattern = "[0-9]{3}.*") %>%
+  map(replace_all, "/home/chrisgraywolf/analysis_desktop/", "")
+```
+
+
+### Add required subfolders
+
+```{r}
+dir.create("data_input")
+dir.create("temp")
+```
+
+## Adapt to Windows system (optionnal)
+
+Install `parallel`: 
+On Windows, run the command `wsl sudo apt-get update` followed by the command `wsl sudo apt-get install parallel`. 
+On Linux, run the same commands without `wsl`, that is run the command `sudo apt-get update` followed by the command `sudo apt-get install parallel`. 
+
+
+
+```{r}
+# Replace all wget calls by wsl wget
+replace_all("002 - dl_IUCN.R", "wget", "wsl wget")
+
+```
 
 
 
@@ -44,6 +215,7 @@ conda_install(envname = "replication-wolf",
 
 ```{r}
 1 + 1
+
 ```
 
 ## Testing python
@@ -56,13 +228,4 @@ Needs reticulate (already installed here).
 
 ## Testing Julia
 
-```{r}
-install.packages("JuliaCall")
-library(JuliaCall)
-install_julia()
-```
 
-```{julia}
- 1 + 1
-
-```
