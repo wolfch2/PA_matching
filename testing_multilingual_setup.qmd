@@ -112,7 +112,7 @@ if(any(missing)) install.packages(required_packages[missing])
 
 ```{r}
 library(reticulate)
-virtualenv_exists(envname = "replication-wolf")
+# virtualenv_exists(envname = "replication-wolf")
 conda_create("replication-wolf")
 conda_install(envname = "replication-wolf", 
               packages = c("earthengine-api",
@@ -254,10 +254,4 @@ file.rename(list.files(path = "data_input/range_maps", pattern ="REPTILES_PART2"
                         pattern="REPTILES_PART2", "REPTILES"))
 ```
 
-## Data
-
-### Download data from Drive
-
-```{r}
-
-```
+## 
