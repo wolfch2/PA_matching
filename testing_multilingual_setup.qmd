@@ -4,9 +4,18 @@ format: html
 editor: visual
 editor_options: 
   chunk_output_type: console
+bibliography: references.bib
 ---
 
 The code used by Wolf and colleagues to obtain their results and published on Github mixes three different coding languages: python, R and Julia. Moreover, although the code is generally clearly written and includes some explanatory comments, several adjustments in the code are required to enable it to run on a different machine. This document provides a technical procedure to enable the reproducibility of the computations shared by Wolf and colleagues.
+
+## Comments on the reproducibility of the analyses.
+
+Some good practices are not respected. The analysis mentions that the sources are publicly available, but the data is not available as is: needs an access to Google Earth Engine. The API is not public and this accessibility is conditionned by the will of Google to keep its platform in free access and not to make any evolution in the GEE API that would not be backward compatible. For these resons, it seems recommended to archive the data outputed by sources which reproducibility is not guaranteed.
+
+It is also very likely that some data used for the analysis gets updated: UICN species data is regularly updated WDPA data on protected area also
+
+The obtaining of the data is not documented for BOTW and IUCN range maps.
 
 ## Technical environment
 
@@ -99,11 +108,11 @@ missing <- !(required_packages %in% installed.packages())
 if(any(missing)) install.packages(required_packages[missing])
 ```
 
-
 ## Set up python
 
 ```{r}
 library(reticulate)
+virtualenv_exists(envname = "replication-wolf")
 conda_create("replication-wolf")
 conda_install(envname = "replication-wolf", 
               packages = c("earthengine-api",
@@ -115,11 +124,14 @@ conda_install(envname = "replication-wolf",
                            "geopandas",
                            "matplotlib",
                            "psutil",
-                           "ray",
+                           "ray-default",
                            "shapely",
                            "dbfread",
-                           "osgeo",
-                           "pyproj"))
+                           "pyproj",
+                           "affine"))
+conda_install(envname = "replication-wolf", 
+              packages = c("gdal"))
+use_condaenv("replication-wolf")
 ```
 
 Create an authorization
@@ -173,7 +185,7 @@ Pkg.add("LibGEOS")
 
 ### Make code paths generic
 
-```{r} 
+```{r}
 library(tidyverse)
 
 replace_all <- function(x, pattern, replacement) {
@@ -187,7 +199,6 @@ list.files(pattern = "[0-9]{3}.*") %>%
   map(replace_all, "/home/chrisgraywolf/analysis_desktop/", "")
 ```
 
-
 ### Add required subfolders
 
 ```{r}
@@ -197,19 +208,13 @@ dir.create("temp")
 
 ## Adapt to Windows system (optionnal)
 
-Install `parallel`: 
-On Windows, run the command `wsl sudo apt-get update` followed by the command `wsl sudo apt-get install parallel`. 
-On Linux, run the same commands without `wsl`, that is run the command `sudo apt-get update` followed by the command `sudo apt-get install parallel`. 
-
-
+Install `parallel`: On Windows, run the command `wsl sudo apt-get update` followed by the command `wsl sudo apt-get install parallel`. On Linux, run the same commands without `wsl`, that is run the command `sudo apt-get update` followed by the command `sudo apt-get install parallel`.
 
 ```{r}
 # Replace all wget calls by wsl wget
 replace_all("002 - dl_IUCN.R", "wget", "wsl wget")
 
 ```
-
-
 
 ## Testing R
 
@@ -228,4 +233,31 @@ Needs reticulate (already installed here).
 
 ## Testing Julia
 
+## Prepare data
 
+The data from IUCN now comes in 2 parts for the reptiles.
+
+```{r}
+library(tidyverse)
+library(sf)
+
+reptiles1 <- st_read("data_input/range_maps/REPTILES_PART1.shp") 
+  
+reptiles1 %>%
+  select(-OBJECTID) %>%
+  st_write(dsn = "data_input/range_maps/REPTILES_PART2.shp", append = TRUE)
+
+file.rename(list.files(path = "data_input/range_maps", pattern ="REPTILES_PART2",
+                       full.names = TRUE),
+            str_replace(list.files(path = "data_input/range_maps",
+                                   pattern="REPTILES_PART2", full.names = TRUE), 
+                        pattern="REPTILES_PART2", "REPTILES"))
+```
+
+## Data
+
+### Download data from Drive
+
+```{r}
+
+```
