@@ -1,5 +1,7 @@
-library(tidyverse)
-library(aws.s3)
+library(dplyr)
+library(stringr)
+library(aws.s3) 
+library(purrr)
 
 # aws.s3::s3sync(path = "data_input",
 #                bucket = "fbedecarrats",
