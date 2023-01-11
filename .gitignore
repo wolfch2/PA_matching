@@ -2,3 +2,5 @@
 .Rhistory
 .RData
 .Ruserdata
+client_secrets.json
+token.txt
