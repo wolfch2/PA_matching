@@ -6,32 +6,32 @@
 # https://medium.com/distributed-computing-with-ray/ray-for-the-curious-fa0e019e17d3
 # https://stackoverflow.com/questions/54582073/sharing-objects-across-workers-using-pyarrow
 
-import affine
-import ctypes
+# import affine
+# import ctypes
 import fiona
-import functools
-import geojson
-import geopandas as gpd
-import glob
-import math
-import matplotlib.pyplot as plt
-import multiprocessing
+# import functools
+# import geojson
+# import geopandas as gpd
+# import glob
+# import math
+# import matplotlib.pyplot as plt
+# import multiprocessing
 import numpy as np
-import operator
-import os
+# import operator
+# import os
 import pandas as pd
-import psutil
-import random
+# import psutil
+# import random
 import rasterio
 import ray
-import shapely
-from collections import defaultdict
+# import shapely
+# from collections import defaultdict
 from dbfread import DBF, FieldParser, InvalidValue
-from fiona import transform
-from osgeo import gdal, ogr
-from pyproj import Proj, transform
-from rasterio import features
-from rasterio.features import bounds as calculate_bounds
+# from fiona import transform
+# from osgeo import gdal, ogr
+# from pyproj import Proj, transform
+# from rasterio import features
+# from rasterio.features import bounds as calculate_bounds
 
 class MyFieldParser(FieldParser):
     def parse(self, field, data):
@@ -45,7 +45,7 @@ def get_indices(project_dir, keep_ids):
     species_data.loc[pd.isna(species_data['lower']), 'lower'] = -1e7
     species_data.loc[pd.isna(species_data['upper']), 'upper'] = 1e7
     ids = []
-    for gp in ['MAMMALS','AMPHIBIANS','REPTILES'] + ['BIRDS_' + str(x) for x in range(1,9)]:
+    for gp in ['MAMMALS','AMPHIBIANS','REPTILES']: # + ['BIRDS_' + str(x) for x in range(1,9)]:
         print(gp)
         shp_path = project_dir + "data_input/range_maps/" + gp + ".shp"
         dbf_path = project_dir + "data_input/range_maps/" + gp + ".dbf"
@@ -115,7 +115,7 @@ def calculate_richness(project_dir, keep_ids, rast_name, num_cpu=12):
     rast.close()
 
 def main():
-    project_dir = "/home/chrisgraywolf/analysis_desktop/PA_matching/"
+    project_dir = "/home/onyxia/PA_matching/"
     species_data = pd.read_csv(project_dir + "data_processed/species_data.csv")
     #
     for gp in list(species_data['group'].unique()):

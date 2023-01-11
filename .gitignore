@@ -2,5 +2,10 @@
 .Rhistory
 .RData
 .Ruserdata
+<<<<<<< HEAD
 client_secrets.json
 token.txt
+=======
+*.tif
+data_*/*
+>>>>>>> ed0a7e7d5d7acfa4ce66dce6d683faa62e24b200
