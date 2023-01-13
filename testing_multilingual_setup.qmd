@@ -111,27 +111,33 @@ if(any(missing)) install.packages(required_packages[missing])
 ## Set up python
 
 ```{r}
-library(reticulate)
-# virtualenv_exists(envname = "replication-wolf")
-conda_create("replication-wolf")
-conda_install(envname = "replication-wolf", 
-              packages = c("earthengine-api",
-                           "rasterio",
-                           "pandas",
-                           "pydrive",
-                           "fiona",
-                           "geojson",
-                           "geopandas",
-                           "matplotlib",
-                           "psutil",
-                           "ray-default",
-                           "shapely",
-                           "dbfread",
-                           "pyproj",
-                           "affine"))
-conda_install(envname = "replication-wolf", 
-              packages = c("gdal"))
-use_condaenv("replication-wolf")
+library(reticulate) # to run python from R
+
+# Variables to modify
+my_envname <- "replication-wolf"
+scripts_to_run <- "003" # or c("001", "003") or "001"
+
+# Install python if not already present
+if (!dir.exists(miniconda_path())) {
+  install_miniconda()
+}
+# Create environment if not already
+if (!my_envname %in% conda_list()$name) {
+  conda_create(my_envname)
+}
+# Packages needed for each script
+requirements <- list(
+  "001" = c("earthengine-api", "rasterio", "pandas", "pydrive"),
+  "003" = c("fiona", "rasterio", "ray-default", "dbfread", "pandas"))
+# Combined depending on the variable defined at beginning of code chunk
+required <- unique(unlist(requirements[scripts_to_run]))
+# identify which ones are missing
+missing_packages <- required[!required %in% py_list_packages(my_envname)$package]
+# Install those
+conda_install(envname = my_envname, 
+              packages = missing_packages)
+# Activate the corresponding environment
+use_condaenv(my_envname)
 ```
 
 Create an authorization
