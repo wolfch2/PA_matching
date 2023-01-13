@@ -23,6 +23,9 @@ import pandas as pd
 # import psutil
 # import random
 import rasterio
+# problem with ray https://github.com/ray-project/ray/issues/14535
+import os
+os.environ["RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE"] = "1"
 import ray
 # import shapely
 # from collections import defaultdict
@@ -30,8 +33,8 @@ from dbfread import DBF, FieldParser, InvalidValue
 # from fiona import transform
 # from osgeo import gdal, ogr
 # from pyproj import Proj, transform
-# from rasterio import features
-# from rasterio.features import bounds as calculate_bounds
+from rasterio import features
+from rasterio.features import bounds as calculate_bounds
 
 class MyFieldParser(FieldParser):
     def parse(self, field, data):
@@ -90,12 +93,12 @@ def calculate_richness(project_dir, keep_ids, rast_name, num_cpu=12):
     ray.init(object_store_memory=45*1024*1024*1024)
     elev_mat_id = ray.put(elev_mat)
     actors = [MyActor.remote(elev_mat_id, project_dir) for _ in range(num_cpu)]
-    pool = ray.experimental.ActorPool(actors)
+    pool = ray.util.ActorPool(actors)
     list(pool.map_unordered(lambda actor, v: actor.add_range.remote(v), id_info_list))
     #
     results = ray.get([actor.get_richness.remote() for actor in actors])
     ray.shutdown()
-    richness = results[0]
+    richness = results[0].copy() # EDIT: adding .copy() as needed with up to date numpy
     for i in range(1,num_cpu):
         richness += results[i]
     #
@@ -115,7 +118,7 @@ def calculate_richness(project_dir, keep_ids, rast_name, num_cpu=12):
     rast.close()
 
 def main():
-    project_dir = "/home/onyxia/PA_matching/"
+    project_dir = "/home/onyxia/work/PA_matching/"
     species_data = pd.read_csv(project_dir + "data_processed/species_data.csv")
     #
     for gp in list(species_data['group'].unique()):
