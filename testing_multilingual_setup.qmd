@@ -144,7 +144,9 @@ my_tifs <- my_files %>%
   pluck("Key")
 
 # Generating the destination paths
-my_tifs_dest <- str_replace(my_tifs, "Replication_wolf", "data_input")
+my_tifs_dest <- my_tifs %>%
+  str_replace("Replication_wolf/data_processed", "data_input") %>%
+  str_replace("Replication_wolf", "data_processed")
 
 # A function to iterate/vectorize copy
 save_from_s3 <- function(x, y) {
