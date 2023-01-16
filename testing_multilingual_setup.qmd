@@ -124,6 +124,7 @@ save_object(
   bucket = "fbedecarrats",
   region = "")
 
+# Securely getting the data from the S3 bucket (private and encrypted)
 system("vault kv get -format=table onyxia-kv/fbedecarrats/species_info", 
        intern = TRUE) %>%
   pluck(17) %>%
@@ -131,16 +132,19 @@ system("vault kv get -format=table onyxia-kv/fbedecarrats/species_info",
 system(paste("unzip -P", my_key, "other.zip"))
 file.remove("other.zip")
 
+# Listing files in bucket
 my_files <- get_bucket_df(bucket = "fbedecarrats",
                           prefix = "Replication_wolf",
                           region = "")
-
+# Selecting tifs at root
 my_tifs <- my_files %>%
   filter(str_ends(Key, ".tif")) %>%
   pluck("Key")
 
+# Generating the destination paths
 my_tifs_dest <- str_replace(my_tifs, "Replication_wolf", "data_input")
 
+# A function to iterate/vectorize copy
 save_from_s3 <- function(x, y) {
   aws.s3::save_object(
     object = x,
@@ -148,11 +152,10 @@ save_from_s3 <- function(x, y) {
     file = y,
     overwrite = FALSE,
     region = "")
-}
-
+  }
+# copy from S3 to local
 map2(my_tifs, my_tifs_dest, save_from_s3)
 
-file.info("data_processed/threatened.tif")
 
 put_object(
   file = "data_processed/threatened.tif",
