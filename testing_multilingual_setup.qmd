@@ -108,6 +108,59 @@ missing <- !(required_packages %in% installed.packages())
 if(any(missing)) install.packages(required_packages[missing])
 ```
 
+## Get the data
+
+```{r}
+
+library(dplyr)
+library(stringr)
+library(aws.s3)
+library(purrr)
+library(stringr)
+
+save_object(
+  file = "other.zip",
+  object = "Replication_wolf/other2.zip",
+  bucket = "fbedecarrats",
+  region = "")
+
+system("vault kv get -format=table onyxia-kv/fbedecarrats/species_info", 
+       intern = TRUE) %>%
+  pluck(17) %>%
+  str_extract("[:alnum:]*$") -> my_key
+system(paste("unzip -P", my_key, "other.zip"))
+file.remove("other.zip")
+
+my_files <- get_bucket_df(bucket = "fbedecarrats",
+                          prefix = "Replication_wolf",
+                          region = "")
+
+my_tifs <- my_files %>%
+  filter(str_ends(Key, ".tif")) %>%
+  pluck("Key")
+
+my_tifs_dest <- str_replace(my_tifs, "Replication_wolf", "data_input")
+
+save_from_s3 <- function(x, y) {
+  aws.s3::save_object(
+    object = x,
+    bucket = "fbedecarrats",
+    file = y,
+    overwrite = FALSE,
+    region = "")
+}
+
+map2(my_tifs, my_tifs_dest, save_from_s3)
+
+file.info("data_processed/threatened.tif")
+
+put_object(
+  file = "data_processed/threatened.tif",
+  object = "Replication_wolf/threatened.tif",
+  bucket = "fbedecarrats",
+  region = "")
+```
+
 ## Set up python
 
 ```{r}
@@ -129,6 +182,7 @@ if (!my_envname %in% conda_list()$name) {
 requirements <- list(
   "001" = c("earthengine-api", "rasterio", "pandas", "pydrive"),
   "003" = c("fiona", "rasterio", "ray-default", "dbfread", "pandas"))
+addition <- c()
 # Combined depending on the variable defined at beginning of code chunk
 required <- unique(unlist(requirements[scripts_to_run]))
 # identify which ones are missing
@@ -136,6 +190,8 @@ missing_packages <- required[!required %in% py_list_packages(my_envname)$package
 # Install those
 conda_install(envname = my_envname, 
               packages = missing_packages)
+conda_install(envname = my_envname, 
+              packages = "libstdcxx-ng")
 # Activate the corresponding environment
 use_condaenv(my_envname)
 ```
