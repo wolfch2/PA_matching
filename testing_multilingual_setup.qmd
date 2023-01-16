@@ -49,6 +49,8 @@ We install all R dependencies that might be required
 remotes::install_github("https://github.com/cran/doMC/tree/fbea362b96cc4469deb6065ff9fbd5d4794ccac1")
 remotes::install_github("https://github.com/cran/gdalUtils")
 remotes::install_github("jonocarroll/ggeasy")
+remotes::install_github("https://github.com/hunzikp/velox", upgrade = FALSE) 
+
 
 # Install from CRAN ------------------------------------------------------------
 
