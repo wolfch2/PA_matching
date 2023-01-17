@@ -16,6 +16,10 @@ REPO_URL=https://${GIT_PERSONAL_ACCESS_TOKEN}@github.com/fBedecarrats/PA_matchin
 git clone $REPO_URL $WORK_DIR
 chown -R onyxia:users $WORK_DIR
 
+# Render quarto
+cd $WORK_DIR
+quarto render
+
 # launch RStudio in the right project
 # Copied from InseeLab UtilitR
     echo \
