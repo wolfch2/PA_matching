@@ -1,0 +1,24 @@
+project:
+  type: book
+  output-dir: docs
+
+book:
+  title: "Impact des aires protégées sur la déforestation : guide de formation pratique"
+  author: "Florent Bédécarrats, Marc Bouvier Marin Ferry et Jeanne de Montalembert"
+  date: "17/01/2023"
+  repo-url: https://github.com/fBedecarrats/PA_matching
+  chapters:
+    - index.qmd
+    - preanalysis_plan.qmd
+    - replication_report/references.qmd
+
+bibliography: references.bib
+
+format:
+  html:
+    theme: cosmo
+    code-fold: true
+
+execute:
+  warning: false
+  error: false
