@@ -3,16 +3,19 @@ project:
   output-dir: docs
 
 book:
-  title: "Impact des aires protégées sur la déforestation : guide de formation pratique"
+  title: 'Replication of Wolf et al. (2021) "A forest loss report card for the world’s protected areas"'
   author: "Florent Bédécarrats, Marc Bouvier Marin Ferry et Jeanne de Montalembert"
   date: "17/01/2023"
   repo-url: https://github.com/fBedecarrats/PA_matching
   chapters:
     - index.qmd
-    - preanalysis_plan.qmd
+    - replication_report/01_introduction.qmd
+    - replication_report/02_preanalysis_plan.qmd
+    - replication_report/03_computing_setup.qmd
+    - replication_report/04_data_preparation.qmd
     - replication_report/references.qmd
 
-bibliography: references.bib
+bibliography: replication_report/references.bib
 
 format:
   html:
