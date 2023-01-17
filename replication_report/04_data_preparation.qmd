@@ -12,7 +12,7 @@ We propose two modes:
 
 Some data (such as the protected areas or the ) so they are encrypted and stored in private location accessible only to the replication team. Others who might want to reproduce the analysis must necessarily turn the mode to `from-scratch`.
 
-```{r}
+```{r select_mode}
 # choose between "iterative-development" and "from stratch
 data_mode <- "iterative-development" 
 
@@ -23,7 +23,7 @@ from_scratch_mode <- data_mode == "from-scratch"
 
 ### Add required subfolders
 
-```{r}
+```{r create_dirs}
 dir.create("data_input")
 dir.create("data_input/PAs")
 dir.create("temp")
@@ -33,7 +33,7 @@ dir.create("data_processed/rasters")
 
 ### Make code paths generic
 
-```{r}
+```{r generic_paths}
 library(tidyverse)
 
 replace_all <- function(x, pattern, replacement) {
@@ -53,7 +53,7 @@ list.files(pattern = "[0-9]{3}.*") %>%
 ## Fetch source data
 get the right WDPA data. Wolf et al. use the data from January 2020.
 
-```{r}
+```{r fetch_wdpa}
 #| eval: !expr from_scratch_mode
 
 library(tidyverse)
@@ -92,7 +92,7 @@ wdpa_global %>%
 
 Get WWF ecoregions
 
-```{r}
+```{r fetch_ecoregions}
 #| eval: !expr from_scratch_mode
 
 my_url <- "https://files.worldwildlife.org/wwfcmsprod/files/Publication/file/6kcchn7e3u_official_teow.zip"
@@ -104,7 +104,7 @@ unzip(zipfile = "temp/teow.zip", exdir = "data_input")
 
 The data from IUCN now comes in 2 parts for the reptiles.
 
-```{r}
+```{r fix_ui}
 #| eval: !expr from_scratch_mode
 
 library(tidyverse)
