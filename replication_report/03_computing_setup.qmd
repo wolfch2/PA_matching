@@ -1,11 +1,4 @@
----
-title: "Testing multilingual setup"
-format: html
-editor: visual
-editor_options: 
-  chunk_output_type: console
-bibliography: references.bib
----
+# Computing environment setup
 
 The code used by Wolf and colleagues to obtain their results and published on Github mixes three different coding languages: python, R and Julia. Moreover, although the code is generally clearly written and includes some explanatory comments, several adjustments in the code are required to enable it to run on a different machine. This document provides a technical procedure to enable the reproducibility of the computations shared by Wolf and colleagues.
 
@@ -39,17 +32,27 @@ The code requires a working installation of Wget. Wget comes with linux platform
 
 We install all R dependencies that might be required
 
-```{r}
+```{r install_r_packages}
 
 # Install from Github --------------------------------------------------------
 
 # Some packages need to be installed from developper sources because there are
 # not available or official sources have some issues.
 # Installing version 1.3.5 which is the last working version apparently
-remotes::install_github("https://github.com/cran/doMC/tree/fbea362b96cc4469deb6065ff9fbd5d4794ccac1")
-remotes::install_github("https://github.com/cran/gdalUtils")
-remotes::install_github("jonocarroll/ggeasy")
-remotes::install_github("https://github.com/hunzikp/velox", upgrade = FALSE) 
+
+if (system.file(package = "doMC") == "") {
+  remotes::install_github("https://github.com/cran/doMC/tree/fbea362b96cc4469deb6065ff9fbd5d4794ccac1")
+} 
+if (system.file(package = "gdalUtils") == "") {
+  remotes::install_github("https://github.com/cran/gdalUtils")
+} 
+if (system.file(package = "ggeasy") == "") {
+  remotes::install_github("jonocarroll/ggeasy")
+} 
+if (system.file(package = "velox") == "") {
+  remotes::install_github("https://github.com/hunzikp/velox", upgrade = FALSE)
+} 
+ 
 
 
 # Install from CRAN ------------------------------------------------------------
@@ -111,147 +114,9 @@ missing <- !(required_packages %in% installed.packages())
 if(any(missing)) install.packages(required_packages[missing])
 ```
 
-## Get the data
-
-```{r}
-
-library(dplyr)
-library(stringr)
-library(aws.s3)
-library(purrr)
-library(stringr)
-
-save_object(
-  file = "other.zip",
-  object = "Replication_wolf/other2.zip",
-  bucket = "fbedecarrats",
-  region = "")
-
-# Securely getting the data from the S3 bucket (private and encrypted)
-system("vault kv get -format=table onyxia-kv/fbedecarrats/species_info", 
-       intern = TRUE) %>%
-  pluck(17) %>%
-  str_extract("[:alnum:]*$") -> my_key
-system(paste("unzip -P", my_key, "other.zip"))
-file.remove("other.zip")
-
-# Listing files in bucket
-my_files <- get_bucket_df(bucket = "fbedecarrats",
-                          prefix = "Replication_wolf",
-                          region = "")
-# Selecting tifs at root
-my_tifs <- my_files %>%
-  filter(str_ends(Key, ".tif")) %>%
-  pluck("Key")
-
-# Generating the destination paths
-my_tifs_dest <- my_tifs %>%
-  str_replace("Replication_wolf/data_processed", "data_input") %>%
-  str_replace("Replication_wolf", "data_processed")
-
-# A function to iterate/vectorize copy
-save_from_s3 <- function(x, y) {
-  aws.s3::save_object(
-    object = x,
-    bucket = "fbedecarrats",
-    file = y,
-    overwrite = FALSE,
-    region = "")
-  }
-# copy from S3 to local
-map2(my_tifs, my_tifs_dest, save_from_s3)
-
-# Select PA shp
-my_PAs <- my_files %>%
-  filter(str_detect(Key, "/PAs/WDPA")) %>%
-  pluck("Key")
-# Create paths in local machine
-my_PAs_dest <- my_PAs %>%
-  str_replace("Replication_wolf/", "data_input/")
-# Retrieve the data
-map2(my_PAs, my_PAs_dest, save_from_s3)
-
-
-# Select WWF shp
-my_biomes <- my_files %>%
-  filter(str_detect(Key, "/official/")) %>%
-  pluck("Key")
-# Create paths in local machine
-my_biomes_dest <- my_biomes %>%
-  str_replace("Replication_wolf/", "data_input/")
-# Retrieve the data
-map2(my_biomes, my_biomes_dest, save_from_s3)
-
-# # Create a function to put data from local machine to S3
-# put_to_s3 <- function(x, y) {
-#   aws.s3::put_object(
-#     file = x,
-#     object = y,
-#     bucket = "fbedecarrats",
-#     region = "",
-#     multipart = TRUE)
-# }
-# 
-# # Apply it to the PAs
-# wdpa_local_files <- list.files("data_input/PAs", full.names = TRUE)
-# wdpa_s3_objects <- wdpa_local_files %>%
-#   str_replace("data_input", "Replication_wolf")
-# map2(wdpa_local_files, wdpa_s3_objects, put_to_s3)
-# # Also to the source
-# put_to_s3("data_input/WDPA_Jan2023_Public.gdb.zip", 
-#           "Replication_wolf/WDPA_Jan2023_Public.gdb.zip")
-```
-
-get the right WDPA data. Wolf et al. use the data from January 2020.
-
-```{r}
-#| eval: false
-
-library(tidyverse)
-library(wdpar)
-library(sf)
-if (!dir.exists("data_input/PAs")) {
-  # Get the data from protectedplanet
-  wdpa_global <- wdpa_fetch("global", download_dir = "data_input")
-  # Build a name with same structure than Wolf et al.
-  wdpa_file_name <- list.files("data_input", pattern = ".gdb.zip") %>%
-    str_remove("_Public.gdb.zip") %>%
-    paste0("data_input/PAs/", ., "-shapefile-polygons.shp")
-  # Filter for polygons (filtering out points to be sure not to exclude something
-  # by mistake) and write locally.
-  wdpa_global %>%
-    filter(st_geometry_type(.) != "MULTIPOINT") %>%
-    st_write(dsn = wdpa_file_name)
-}
-
-wdpa_global %>%
-  #"We excluded PAs from our primary analysis that: 
-  #[1] had point (centroid) information only, 
-  filter(st_geometry_type(.) != "MULTIPOINT") %>%
-  #[2] were exclusively marine, 
-  filter(MARINE != "2") %>% #0: 100% terrestrial, 1: both, 2: 100% marine
-  #[3] were established after 2000 since the forest loss data range from 2001 to 2018,
-  filter(STATUS_YR > 2000) %>%
-  #[4] had area less than 1 km2 since forest change in small PAs can be hard to
-  # estimate accurately, 
-  filter(REP_AREA - REP_M_AREA >= 1) %>%
-  st_write(dsn = wdpa_file_name)
-
-# 48066 PAs filtered. Check as this seems quite low compared to 286356 in the 
-# WDPA global database.
-```
-
-Get WWF ecoregions
-
-```{r}
-my_url <- "https://files.worldwildlife.org/wwfcmsprod/files/Publication/file/6kcchn7e3u_official_teow.zip"
-download.file(my_url, destfile = "temp/teow.zip")
-unzip(zipfile = "temp/teow.zip", exdir = "data_input")
-```
-
 ## Set up python
 
-```{r}
+```{r set_up_python}
 library(reticulate) # to run python from R
 
 # Variables to modify
@@ -274,19 +139,27 @@ addition <- c()
 # Combined depending on the variable defined at beginning of code chunk
 required <- unique(unlist(requirements[scripts_to_run]))
 # identify which ones are missing
-missing_packages <- required[!required %in% py_list_packages(my_envname)$package]
+py_installed_packages <- py_list_packages(my_envname)$package
+missing_packages <- required[!required %in% py_installed_packages]
 # Install those
-conda_install(envname = my_envname, 
+if (length(missing_packages) > 0) {
+  conda_install(envname = my_envname, 
               packages = missing_packages)
-conda_install(envname = my_envname, 
+}
+if (!"libstdcxx-ng" %in% py_installed_packages) {
+  conda_install(envname = my_envname, 
               packages = "libstdcxx-ng")
+}
+
 # Activate the corresponding environment
 use_condaenv(my_envname)
 ```
 
 Create an authorization
 
-```{python}
+```{python setup_google_services}
+#| eval: false
+
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 
@@ -310,71 +183,48 @@ gauth.SaveCredentialsFile("mycreds.txt")
 
 First we install or set-up Julia from R if needed.
 
-```{r}
+```{r set_up_julia}
 library(JuliaCall)
-# Install or set up julia if needed
-julia_setup()
-```
 
-We also install the packages used in the code of Wolf et al.
-
-```{julia}
-using Pkg
-Pkg.add("ArchGDAL")
-Pkg.add("DataFrames")
-Pkg.add("Discretizers")
-Pkg.add("Shapefile")
-Pkg.add("FreqTables")
-Pkg.add("Plots")
-Pkg.add("StatsBase")
-Pkg.add("CSV")
-Pkg.add("LibGEOS")
+if (!dir.exists(paste0(rappdirs::user_data_dir(), "/R/JuliaCall/julia"))) {
+  install_julia()
+}
+if (!exists("my_julia")) {
+  my_julia <- julia_setup()
+}
+julia_install_package_if_needed("ArchGDAL")
+julia_install_package_if_needed("DataFrames")
+julia_install_package_if_needed("Discretizers")
+julia_install_package_if_needed("Shapefile")
+julia_install_package_if_needed("FreqTables")
+julia_install_package_if_needed("Plots")
+julia_install_package_if_needed("StatsBase")
+julia_install_package_if_needed("CSV")
+julia_install_package_if_needed("LibGEOS")
 ```
 
 ## Harmonize paths
 
-### Make code paths generic
-
-```{r}
-library(tidyverse)
-
-replace_all <- function(x, pattern, replacement) {
-  print(x)
-  readLines(x) %>%
-    str_replace_all(pattern, replacement) %>%
-    writeLines(x)
-}
-
-# Replace working directory or data sources paths
-list.files(pattern = "[0-9]{3}.*") %>%
-  map(replace_all, "/home/chrisgraywolf/analysis_desktop/", "")
-list.files(pattern = "[0-9]{3}.*") %>%
-  map(replace_all, "/home/chrisgraywolf/shared/analysis/PA_matching", ".")
-```
-
-### Add required subfolders
-
-```{r}
-dir.create("data_input")
-dir.create("data_input/PAs")
-dir.create("temp")
-dir.create("data_processed")
-dir.create("data_processed/rasters")
-```
 
 ## Adapt to Windows system (optionnal)
 
-Install `parallel`: On Windows, run the command `wsl sudo apt-get update` followed by the command `wsl sudo apt-get install parallel`. On Linux, run the same commands without `wsl`, that is run the command `sudo apt-get update` followed by the command `sudo apt-get install parallel`.
+The script `002 - dl_IUCN.R` includes a system command that `wget` that refers to a fownloading software that is included in UNIX platforms (Mac and Linux). It is possible however to run it on Windows, if and only the Windows system includs Windows Subsystem for Linux. In that case, if wsl is not already installed the user must first install `parallel` that includes `wget`, runing the command `wsl sudo apt-get update` followed by the command `wsl sudo apt-get install parallel`.
 
-```{r}
+On Linux, if `wget` is not available, the user must run the same commands without `wsl`, that is run the command `sudo apt-get update` followed by the command `sudo apt-get install parallel`.
+
+```{r wget_for_windows}
+#| eval: false
+
 # Replace all wget calls by wsl wget
-replace_all("002 - dl_IUCN.R", "wget", "wsl wget")
+if (Sys.info()["sysname"] == "Windows") {
+  replace_all("002 - dl_IUCN.R", "wget", "wsl wget")
+}
 
 ```
 
 ## Testing R
 
-```{r}
+```{r simple_test_r}
 1 + 1
 
 ```
@@ -383,34 +233,15 @@ replace_all("002 - dl_IUCN.R", "wget", "wsl wget")
 
 Needs reticulate (already installed here).
 
-```{python}
+```{python simple_test_python}
 1 + 1
 ```
 
 ## Testing Julia
 
-## Prepare data
-
-The data from IUCN now comes in 2 parts for the reptiles.
-
-```{r}
-library(tidyverse)
-library(sf)
-
-reptiles1 <- st_read("data_input/range_maps/REPTILES_PART1.shp") 
-  
-reptiles1 %>%
-  select(-OBJECTID) %>%
-  st_write(dsn = "data_input/range_maps/REPTILES_PART2.shp", append = TRUE)
-
-file.rename(list.files(path = "data_input/range_maps", pattern ="REPTILES_PART2",
-                       full.names = TRUE),
-            str_replace(list.files(path = "data_input/range_maps",
-                                   pattern="REPTILES_PART2", full.names = TRUE), 
-                        pattern="REPTILES_PART2", "REPTILES"))
+```{julia simple_test_julia}
+1 + 1
 ```
-
-## 
 
 ## Executing 004 - join rasters
 
