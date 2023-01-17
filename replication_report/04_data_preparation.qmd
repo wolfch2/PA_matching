@@ -1,0 +1,218 @@
+# Data gathering and preparation
+
+## General setup
+
+### Chose mode: `iterative-development` or `from-scratch`
+
+We propose two modes:
+
+-   `from-scratch` starts from a clean slates and gathers all the data from the original sources
+
+-   `iterative-development` gathers the data produced by previous steps that has been provisionnally stored in a data lake
+
+Some data (such as the protected areas or the ) so they are encrypted and stored in private location accessible only to the replication team. Others who might want to reproduce the analysis must necessarily turn the mode to `from-scratch`.
+
+```{r}
+# choose between "iterative-development" and "from stratch
+data_mode <- "iterative-development" 
+
+# boolean values from the previous
+iterative_development_mode <- data_mode == "iterative-development"
+from_scratch_mode <- data_mode == "from-scratch"
+```
+
+### Add required subfolders
+
+```{r}
+dir.create("data_input")
+dir.create("data_input/PAs")
+dir.create("temp")
+dir.create("data_processed")
+dir.create("data_processed/rasters")
+```
+
+### Make code paths generic
+
+```{r}
+library(tidyverse)
+
+replace_all <- function(x, pattern, replacement) {
+  print(x)
+  readLines(x) %>%
+    str_replace_all(pattern, replacement) %>%
+    writeLines(x)
+}
+
+# Replace working directory or data sources paths
+list.files(pattern = "[0-9]{3}.*") %>%
+  map(replace_all, "/home/chrisgraywolf/analysis_desktop/", "")
+list.files(pattern = "[0-9]{3}.*") %>%
+  map(replace_all, "/home/chrisgraywolf/shared/analysis/PA_matching", ".")
+```
+
+## Fetch source data
+get the right WDPA data. Wolf et al. use the data from January 2020.
+
+```{r}
+#| eval: !expr from_scratch_mode
+
+library(tidyverse)
+library(wdpar)
+library(sf)
+if (!dir.exists("data_input/PAs")) {
+  # Get the data from protectedplanet
+  wdpa_global <- wdpa_fetch("global", download_dir = "data_input")
+  # Build a name with same structure than Wolf et al.
+  wdpa_file_name <- list.files("data_input", pattern = ".gdb.zip") %>%
+    str_remove("_Public.gdb.zip") %>%
+    paste0("data_input/PAs/", ., "-shapefile-polygons.shp")
+  # Filter for polygons (filtering out points to be sure not to exclude something
+  # by mistake) and write locally.
+  wdpa_global %>%
+    filter(st_geometry_type(.) != "MULTIPOINT") %>%
+    st_write(dsn = wdpa_file_name)
+}
+
+wdpa_global %>%
+  #"We excluded PAs from our primary analysis that: 
+  #[1] had point (centroid) information only, 
+  filter(st_geometry_type(.) != "MULTIPOINT") %>%
+  #[2] were exclusively marine, 
+  filter(MARINE != "2") %>% #0: 100% terrestrial, 1: both, 2: 100% marine
+  #[3] were established after 2000 since the forest loss data range from 2001 to 2018,
+  filter(STATUS_YR > 2000) %>%
+  #[4] had area less than 1 km2 since forest change in small PAs can be hard to
+  # estimate accurately, 
+  filter(REP_AREA - REP_M_AREA >= 1) %>%
+  st_write(dsn = wdpa_file_name)
+
+# 48066 PAs filtered. Check as this seems quite low compared to 286356 in the 
+# WDPA global database.
+```
+
+Get WWF ecoregions
+
+```{r}
+#| eval: !expr from_scratch_mode
+
+my_url <- "https://files.worldwildlife.org/wwfcmsprod/files/Publication/file/6kcchn7e3u_official_teow.zip"
+download.file(my_url, destfile = "temp/teow.zip")
+unzip(zipfile = "temp/teow.zip", exdir = "data_input")
+```
+
+## Prepare data
+
+The data from IUCN now comes in 2 parts for the reptiles.
+
+```{r}
+#| eval: !expr from_scratch_mode
+
+library(tidyverse)
+library(sf)
+
+reptiles1 <- st_read("data_input/range_maps/REPTILES_PART1.shp") 
+  
+reptiles1 %>%
+  select(-OBJECTID) %>%
+  st_write(dsn = "data_input/range_maps/REPTILES_PART2.shp", append = TRUE)
+
+file.rename(list.files(path = "data_input/range_maps", pattern ="REPTILES_PART2",
+                       full.names = TRUE),
+            str_replace(list.files(path = "data_input/range_maps",
+                                   pattern="REPTILES_PART2", full.names = TRUE), 
+                        pattern="REPTILES_PART2", "REPTILES"))
+```
+
+## Get pre-processed milestones
+
+```{r}
+#| eval: !expr iterative_development_mode
+
+library(dplyr)
+library(stringr)
+library(aws.s3)
+library(purrr)
+library(stringr)
+
+save_object(
+  file = "other.zip",
+  object = "Replication_wolf/other2.zip",
+  bucket = "fbedecarrats",
+  region = "")
+
+# Securely getting the data from the S3 bucket (private and encrypted)
+system("vault kv get -format=table onyxia-kv/fbedecarrats/species_info", 
+       intern = TRUE) %>%
+  pluck(17) %>%
+  str_extract("[:alnum:]*$") -> my_key
+system(paste("unzip -P", my_key, "other.zip"))
+file.remove("other.zip")
+
+# Listing files in bucket
+my_files <- get_bucket_df(bucket = "fbedecarrats",
+                          prefix = "Replication_wolf",
+                          region = "")
+# Selecting tifs at root
+my_tifs <- my_files %>%
+  filter(str_ends(Key, ".tif")) %>%
+  pluck("Key")
+
+# Generating the destination paths
+my_tifs_dest <- my_tifs %>%
+  str_replace("Replication_wolf/data_processed", "data_input") %>%
+  str_replace("Replication_wolf", "data_processed")
+
+# A function to iterate/vectorize copy
+save_from_s3 <- function(x, y) {
+  aws.s3::save_object(
+    object = x,
+    bucket = "fbedecarrats",
+    file = y,
+    overwrite = FALSE,
+    region = "")
+  }
+# copy from S3 to local
+map2(my_tifs, my_tifs_dest, save_from_s3)
+
+# Select PA shp
+my_PAs <- my_files %>%
+  filter(str_detect(Key, "/PAs/WDPA")) %>%
+  pluck("Key")
+# Create paths in local machine
+my_PAs_dest <- my_PAs %>%
+  str_replace("Replication_wolf/", "data_input/")
+# Retrieve the data
+map2(my_PAs, my_PAs_dest, save_from_s3)
+
+
+# Select WWF shp
+my_biomes <- my_files %>%
+  filter(str_detect(Key, "/official/")) %>%
+  pluck("Key")
+# Create paths in local machine
+my_biomes_dest <- my_biomes %>%
+  str_replace("Replication_wolf/", "data_input/")
+# Retrieve the data
+map2(my_biomes, my_biomes_dest, save_from_s3)
+
+# # Create a function to put data from local machine to S3
+# put_to_s3 <- function(x, y) {
+#   aws.s3::put_object(
+#     file = x,
+#     object = y,
+#     bucket = "fbedecarrats",
+#     region = "",
+#     multipart = TRUE)
+# }
+# 
+# # Apply it to the PAs
+# wdpa_local_files <- list.files("data_input/PAs", full.names = TRUE)
+# wdpa_s3_objects <- wdpa_local_files %>%
+#   str_replace("data_input", "Replication_wolf")
+# map2(wdpa_local_files, wdpa_s3_objects, put_to_s3)
+# # Also to the source
+# put_to_s3("data_input/WDPA_Jan2023_Public.gdb.zip", 
+#           "Replication_wolf/WDPA_Jan2023_Public.gdb.zip")
+```
+
+
