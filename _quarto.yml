@@ -13,6 +13,7 @@ book:
     - replication_report/02_preanalysis_plan.qmd
     - replication_report/03_computing_setup.qmd
     - replication_report/04_data_preparation.qmd
+    - replication_report/05_reproduction_as_is.qmd
     - replication_report/references.qmd
 
 bibliography: replication_report/references.bib
