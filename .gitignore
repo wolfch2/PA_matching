@@ -12,3 +12,5 @@ data_*/*
 
 /.quarto/
 docs/*
+*.zip
+replication_report/*/
