@@ -42,20 +42,15 @@ get the right WDPA data. Wolf et al. use the data from January 2020.
 library(tidyverse)
 library(wdpar)
 library(sf)
-if (!dir.exists("data_input/PAs")) {
-  # Get the data from protectedplanet
-  wdpa_global <- wdpa_fetch("global", download_dir = "data_input")
-  # Build a name with same structure than Wolf et al.
-  wdpa_file_name <- list.files("data_input", pattern = ".gdb.zip") %>%
-    str_remove("_Public.gdb.zip") %>%
-    paste0("data_input/PAs/", ., "-shapefile-polygons.shp")
-  # Filter for polygons (filtering out points to be sure not to exclude something
-  # by mistake) and write locally.
-  wdpa_global %>%
-    filter(st_geometry_type(.) != "MULTIPOINT") %>%
-    st_write(dsn = wdpa_file_name)
-}
 
+# Get the data from protectedplanet
+wdpa_global <- wdpa_fetch("global", download_dir = "data_input")
+# Build a name with same structure than Wolf et al.
+wdpa_file_name <- list.files("data_input", pattern = ".gdb.zip") %>%
+  str_remove("_Public.gdb.zip") %>%
+  paste0("data_input/PAs/", ., "-shapefile-polygons.shp")
+# Filter for polygons (filtering out points to be sure not to exclude something
+# by mistake) and write locally.
 wdpa_global %>%
   #"We excluded PAs from our primary analysis that: 
   #[1] had point (centroid) information only, 
