@@ -64,6 +64,8 @@ wdpa_global %>%
   filter(REP_AREA - REP_M_AREA >= 1) %>%
   st_write(dsn = wdpa_file_name)
 
+
+
 # 48066 PAs filtered. Check as this seems quite low compared to 286356 in the 
 # WDPA global database.
 ```
@@ -137,8 +139,11 @@ my_tifs <- my_files %>%
 
 # Generating the destination paths
 my_tifs_dest <- my_tifs %>%
-  str_replace("Replication_wolf/data_processed", "data_processed/rasters") %>%
+  str_replace("data_processed/elev.tif", "data_processed/rasters/elev.tif") %>%
+  str_replace("Replication_wolf/data_processed", "data_processed") %>%
   str_replace("Replication_wolf", "data_input")
+
+# transfer_tif <- tibble(my_tifs, my_tifs_dest)
 
 # A function to iterate/vectorize copy
 save_from_s3 <- function(x, y) {
