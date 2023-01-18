@@ -73,16 +73,6 @@ wdpa_global %>%
 # WDPA global database.
 ```
 
-Get WWF ecoregions
-
-```{r fetch_ecoregions}
-#| eval: !expr from_scratch_mode
-
-my_url <- "https://files.worldwildlife.org/wwfcmsprod/files/Publication/file/6kcchn7e3u_official_teow.zip"
-download.file(my_url, destfile = "temp/teow.zip")
-unzip(zipfile = "temp/teow.zip", exdir = "data_input")
-```
-
 ## Prepare data
 
 The data from IUCN now comes in 2 parts for the reptiles.
