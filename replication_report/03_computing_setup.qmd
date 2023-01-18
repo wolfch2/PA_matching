@@ -1,3 +1,8 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
 # Computing environment setup
 
 The code used by Wolf and colleagues to obtain their results and published on Github mixes three different coding languages: python, R and Julia. Moreover, although the code is generally clearly written and includes some explanatory comments, several adjustments in the code are required to enable it to run on a different machine. This document provides a technical procedure to enable the reproducibility of the computations shared by Wolf and colleagues.
@@ -52,7 +57,10 @@ if (system.file(package = "ggeasy") == "") {
 if (system.file(package = "velox") == "") {
   remotes::install_github("https://github.com/hunzikp/velox", upgrade = FALSE)
 } 
- 
+if (system.file(package = "rnaturalearth") == "") {
+  remotes::install_github("https://github.com/ropensci/rnaturalearth")
+} 
+
 
 
 # Install from CRAN ------------------------------------------------------------
