@@ -3,6 +3,7 @@ output: html_document
 editor_options: 
   chunk_output_type: console
 ---
+
 # Reproduction "as is" of the publised results
 
 We want to make all code modifications transparent, so we download a clean version of Wolf et al. source code.
@@ -20,3 +21,81 @@ file.copy(list.files("PA_matching-master", full.names = TRUE),
           "PA_matching_asis")
 ```
 
+## Original source code execution
+
+Some code modifications are required for the code to run. These edits are not intended to test the robustness of the analysis, just for the successful run of the scripts.
+
+We will use the following function that explicitly declares which modification are made in the source code.
+
+```{r}
+
+library(tidyverse)
+
+# Not a good practice, only for debugging
+# setwd("replication_report")
+
+# A function to replace some parts of the code
+replace_all <- function(x, pattern, replacement) {
+  print(x)
+  readLines(x) %>%
+    str_replace_all(pattern, replacement) %>%
+    writeLines(x)
+}
+```
+
+For each file, we will
+
+### Fetch data from Google Earth Engine
+
+### Fetch species data from IUCN
+
+### Compute species richness
+
+### Join rasters
+
+This steps corresponds to the file `004 - join_rasters.R`, which original content can be examined below.
+
+::: {.callout-code collapse="true"}
+```{r}
+#| echo: false
+#| warning: false
+#| class-output: "sourceCode python"
+
+cat(readLines("PA_matching_asis/004 - join_rasters.R"), sep = "\n")
+```
+:::
+
+This script cannot be run without modification. The location of the working directory was specific to the author machine, we replace by a generic location. The script fetches data from Curtis et al \[INSERT CITATION\], but the URL has changed. We replace with the new URL and modify too the file name with is now all in lowercase.
+
+```{r}
+join_script <- "PA_matching_asis/004 - join_rasters.R"
+# Change the working directory location
+replace_all(join_script, # in the original script
+            "/home/chrisgraywolf/shared/analysis/PA_matching/", 
+            ".") # keep the current working directory instead
+
+replace_all(join_script, # Replace Science URL that has changed
+            "https://science.sciencemag.org/highwire/filestream/715492/field_highwire_adjunct_files/2/aau3445-Data-S3.tif", 
+             "https://www.science.org/action/downloadSupplement?doi=10.1126%2Fscience.aau3445&file=aau3445-data-s3.tif")
+replace_all(join_script, # Replace Science URL that has changed
+            "data_input/aau3445-Data-S3.tif",
+            "data_input/aau3445-data-s3.tif")
+```
+
+Execute the code
+
+```{r}
+source("PA_matching_asis/004 - join_rasters.R")
+```
+
+### Match pixels on covariates
+
+### Merge the results
+
+### Perform country level analysis
+
+### Produce summary figures
+
+### Compute SVC model
+
+### Run matching sensitivity
