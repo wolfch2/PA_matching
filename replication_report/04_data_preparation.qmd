@@ -167,15 +167,15 @@ my_PAs_dest <- my_PAs %>%
 # Retrieve the data
 map2(my_PAs, my_PAs_dest, save_from_s3)
 
-# Select WWF shp
-my_biomes <- my_files %>%
-  filter(str_detect(Key, "/official/")) %>%
-  pluck("Key")
-# Create paths in local machine
-my_biomes_dest <- my_biomes %>%
-  str_replace("Replication_wolf/", "data_input/")
-# Retrieve the data
-map2(my_biomes, my_biomes_dest, save_from_s3)
+# # Select WWF shp
+# my_biomes <- my_files %>%
+#   filter(str_detect(Key, "/official/")) %>%
+#   pluck("Key")
+# # Create paths in local machine
+# my_biomes_dest <- my_biomes %>%
+#   str_replace("Replication_wolf/", "data_input/")
+# # Retrieve the data
+# map2(my_biomes, my_biomes_dest, save_from_s3)
 
 # # Create a function to put data from local machine to S3
 # put_to_s3 <- function(x, y) {
