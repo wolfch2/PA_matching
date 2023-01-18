@@ -71,15 +71,26 @@ This script cannot be run without modification. The location of the working dire
 join_script <- "PA_matching_asis/004 - join_rasters.R"
 # Change the working directory location
 replace_all(join_script, # in the original script
-            "/home/chrisgraywolf/shared/analysis/PA_matching/", 
-            ".") # keep the current working directory instead
+            "\"/home/chrisgraywolf/shared/analysis/PA_matching/\"", 
+            "paste0(getwd(), \"/\")") # keep the current working directory instead
 
 replace_all(join_script, # Replace Science URL that has changed
             "https://science.sciencemag.org/highwire/filestream/715492/field_highwire_adjunct_files/2/aau3445-Data-S3.tif", 
              "https://www.science.org/action/downloadSupplement?doi=10.1126%2Fscience.aau3445&file=aau3445-data-s3.tif")
-replace_all(join_script, # Replace Science URL that has changed
+# Replace Curtis et al filename: lowercased by Science portal admins
+replace_all(join_script, 
             "data_input/aau3445-Data-S3.tif",
             "data_input/aau3445-data-s3.tif")
+# We have not found a way to fetch a previous version of the WDPA database
+# January 2023 is the one we use.
+replace_all(join_script, 
+            "WDPA_Jan2020",
+            "WDPA_Jan2023")
+# Replace url to download WWF data
+replace_all(join_script, 
+            "https://c402277.ssl.cf1.rackcdn.com/publications/15/files/original/official_teow.zip?1349272619",
+            "https://files.worldwildlife.org/wwfcmsprod/files/Publication/file/6kcchn7e3u_official_teow.zip")
+
 ```
 
 Execute the code
