@@ -44,7 +44,7 @@ if (system.file(package = "doMC") == "") {
   remotes::install_github("https://github.com/cran/doMC/tree/fbea362b96cc4469deb6065ff9fbd5d4794ccac1")
 } 
 if (system.file(package = "gdalUtils") == "") {
-  remotes::install_github("https://github.com/cran/gdalUtils")
+  remotes::install_github("https://github.com/cran/gdalUtils", upgrade = FALSE)
 } 
 if (system.file(package = "ggeasy") == "") {
   remotes::install_github("jonocarroll/ggeasy")
