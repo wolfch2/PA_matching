@@ -31,24 +31,6 @@ dir.create("data_processed")
 dir.create("data_processed/rasters")
 ```
 
-### Make code paths generic
-
-```{r generic_paths}
-library(tidyverse)
-
-replace_all <- function(x, pattern, replacement) {
-  print(x)
-  readLines(x) %>%
-    str_replace_all(pattern, replacement) %>%
-    writeLines(x)
-}
-
-# Replace working directory or data sources paths
-list.files(pattern = "[0-9]{3}.*") %>%
-  map(replace_all, "/home/chrisgraywolf/analysis_desktop/", "")
-list.files(pattern = "[0-9]{3}.*") %>%
-  map(replace_all, "/home/chrisgraywolf/shared/analysis/PA_matching", ".")
-```
 
 ## Fetch source data
 
@@ -184,7 +166,6 @@ my_PAs_dest <- my_PAs %>%
   str_replace("Replication_wolf/", "data_input/")
 # Retrieve the data
 map2(my_PAs, my_PAs_dest, save_from_s3)
-
 
 # Select WWF shp
 my_biomes <- my_files %>%
