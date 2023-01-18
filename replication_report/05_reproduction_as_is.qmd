@@ -66,6 +66,9 @@ cat(readLines("PA_matching_asis/004 - join_rasters.R"), sep = "\n")
 :::
 
 This script cannot be run without modification. The location of the working directory was specific to the author machine, we replace by a generic location. The script fetches data from Curtis et al \[INSERT CITATION\], but the URL has changed. We replace with the new URL and modify too the file name with is now all in lowercase.
+The URLs for Curtis et al. data and WWF data have changed
+There is a typo on line 136: an object called `PA_dists` is called but no object exists with this name, however an object `PAs_dist` (without a final "s") was created on the previous code line
+
 
 ```{r}
 join_script <- "PA_matching_asis/004 - join_rasters.R"
@@ -90,7 +93,10 @@ replace_all(join_script,
 replace_all(join_script, 
             "https://c402277.ssl.cf1.rackcdn.com/publications/15/files/original/official_teow.zip?1349272619",
             "https://files.worldwildlife.org/wwfcmsprod/files/Publication/file/6kcchn7e3u_official_teow.zip")
-
+# Correct the typo in the code
+replace_all(join_script, 
+            "PAs_buffer = PA_dists <= 10e3",
+            "PAs_buffer = PAs_dist <= 10e3")
 ```
 
 Execute the code
