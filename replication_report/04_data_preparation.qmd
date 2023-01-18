@@ -51,6 +51,7 @@ list.files(pattern = "[0-9]{3}.*") %>%
 ```
 
 ## Fetch source data
+
 get the right WDPA data. Wolf et al. use the data from January 2020.
 
 ```{r fetch_wdpa}
@@ -159,8 +160,8 @@ my_tifs <- my_files %>%
 
 # Generating the destination paths
 my_tifs_dest <- my_tifs %>%
-  str_replace("Replication_wolf/data_processed", "data_input") %>%
-  str_replace("Replication_wolf", "data_processed")
+  str_replace("Replication_wolf/data_processed", "data_processed/rasters") %>%
+  str_replace("Replication_wolf", "data_input")
 
 # A function to iterate/vectorize copy
 save_from_s3 <- function(x, y) {
@@ -211,8 +212,15 @@ map2(my_biomes, my_biomes_dest, save_from_s3)
 #   str_replace("data_input", "Replication_wolf")
 # map2(wdpa_local_files, wdpa_s3_objects, put_to_s3)
 # # Also to the source
-# put_to_s3("data_input/WDPA_Jan2023_Public.gdb.zip", 
+# put_to_s3("data_input/WDPA_Jan2023_Public.gdb.zip",
 #           "Replication_wolf/WDPA_Jan2023_Public.gdb.zip")
+# # Single put
+# aws.s3::put_object(
+#   file = "data_input/aau3445-Data-S3.tif",
+#   object = "Replication_wolf/aau3445-Data-S3.tif",
+#   bucket = "fbedecarrats",
+#   region = "",
+#   multipart = TRUE)
 ```
 
 
