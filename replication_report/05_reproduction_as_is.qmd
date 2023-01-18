@@ -1,0 +1,22 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+# Reproduction "as is" of the publised results
+
+We want to make all code modifications transparent, so we download a clean version of Wolf et al. source code.
+
+```{r}
+# URL pointing to the zip download of the Wolf et al. repository
+repo <- "https://codeload.github.com/wolfch2/PA_matching/zip/refs/heads/master"
+# downloads locally
+download.file(repo, destfile = "original.zip")
+# unzips to a containing folder named PA_matching-master (github default)
+unzip("original.zip")
+# original folder will remain intact, we make a copy with required edits to run
+dir.create("PA_matching_asis")
+file.copy(list.files("PA_matching-master", full.names = TRUE), 
+          "PA_matching_asis")
+```
+
