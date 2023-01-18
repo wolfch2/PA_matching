@@ -2,6 +2,9 @@
 
 ## General setup
 
+A challenge for this replication 
+The analysis mentions that the sources are publicly available, but the data is not available as is: needs an access to Google Earth Engine. The API is not public and this accessibility is conditioned by the will of Google to keep its platform in free access and not to make any evolution in the GEE API that would not be backward compatible. For these resons, it seems recommended to archive the data outputed by sources which reproducibility is not guaranteed.
+
 ### Chose mode: `iterative-development` or `from-scratch`
 
 We propose two modes:

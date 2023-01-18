@@ -7,9 +7,9 @@ editor_options:
 
 The code used by Wolf and colleagues to obtain their results and published on Github mixes three different coding languages: python, R and Julia. Moreover, although the code is generally clearly written and includes some explanatory comments, several adjustments in the code are required to enable it to run on a different machine. This document provides a technical procedure to enable the reproducibility of the computations shared by Wolf and colleagues.
 
-## Comments on the reproducibility of the analyses.
+## Comments on the reproducibility of the analyses
 
-Some good practices are not respected. The analysis mentions that the sources are publicly available, but the data is not available as is: needs an access to Google Earth Engine. The API is not public and this accessibility is conditionned by the will of Google to keep its platform in free access and not to make any evolution in the GEE API that would not be backward compatible. For these resons, it seems recommended to archive the data outputed by sources which reproducibility is not guaranteed.
+Some good practices are not respected. The analysis mentions that the sources are publicly available, but the data is not available as is: needs an access to Google Earth Engine. The API is not public and this accessibility is conditioned by the will of Google to keep its platform in free access and not to make any evolution in the GEE API that would not be backward compatible. For these resons, it seems recommended to archive the data outputed by sources which reproducibility is not guaranteed.
 
 It is also very likely that some data used for the analysis gets updated: UICN species data is regularly updated WDPA data on protected area also
 
