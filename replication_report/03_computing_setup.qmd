@@ -111,7 +111,7 @@ required_packages <- c( # List all required R packages
   "stars",
   "stringr",
   "tidyverse",
-  "unix",
+  # "unix",
   "velox",
   "viridis",
   "wbstats",
@@ -119,7 +119,8 @@ required_packages <- c( # List all required R packages
 missing <- !(required_packages %in% installed.packages())
 
 # Install 
-if(any(missing)) install.packages(required_packages[missing])
+if(any(missing)) install.packages(required_packages[missing], 
+                                  repos = "https://cran.irsn.fr/")
 ```
 
 ## Set up python
