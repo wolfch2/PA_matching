@@ -11,8 +11,9 @@ We want to make all code modifications transparent, so we download a clean versi
 ```{r}
 # URL pointing to the zip download of the Wolf et al. repository
 repo <- "https://codeload.github.com/wolfch2/PA_matching/zip/refs/heads/master"
+
 # downloads locally
-download.file(repo, destfile = "original.zip")
+download.file(repo, destfile = "original.zip", method = "curl")
 # unzips to a containing folder named PA_matching-master (github default)
 unzip("original.zip")
 # original folder will remain intact, we make a copy with required edits to run
@@ -102,10 +103,31 @@ replace_all(join_script,
 Execute the code
 
 ```{r}
-source("PA_matching_asis/004 - join_rasters.R")
+source(join_script)
 ```
 
 ### Match pixels on covariates
+
+
+```{r}
+matching_script <- "PA_matching_asis/005 - covariate_matching.jl"
+
+my_wd <- paste0(getwd(), "/")
+
+# Change the working directory location
+replace_all(matching_script, # in the original script
+            "\"/home/chrisgraywolf/shared/analysis/PA_matching/\"", 
+            my_wd) # keep the current working directory instead
+```
+
+
+
+```{r}
+#| eval: true
+library(JuliaCall)
+julia_source(matching_script)
+```
+
 
 ### Merge the results
 
