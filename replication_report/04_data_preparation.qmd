@@ -67,8 +67,6 @@ wdpa_global %>%
   filter(REP_AREA - REP_M_AREA >= 1) %>%
   st_write(dsn = wdpa_file_name)
 
-
-
 # 48066 PAs filtered. Check as this seems quite low compared to 286356 in the 
 # WDPA global database.
 ```
@@ -110,27 +108,6 @@ library(stringr)
 if (Sys.info()["sysname"] == "Windows") {
   source("secrets_aws.R")
 }
-
-# save_object(
-#   file = "other.zip",
-#   object = "Replication_wolf/other2.zip",
-#   bucket = "fbedecarrats",
-#   region = "")
-
-# Securely getting the data from the S3 bucket (private and encrypted)
-
-# If running on SSP Cloud, getting the key from vault
-if (Sys.info()["effective_user"] == "onyxia") {
-  system("vault kv get -format=table onyxia-kv/fbedecarrats/species_info", 
-         intern = TRUE) %>%
-    pluck(17) %>%
-    str_extract("[:alnum:]*$") -> my_key
-} else {
- my_key <- readLines("secret_zip_key")
-}
-
-system(paste("unzip -P", my_key, "other.zip"))
-file.remove("other.zip")
 
 # Listing files in bucket
 my_files <- get_bucket_df(bucket = "fbedecarrats",
