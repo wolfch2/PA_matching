@@ -29,7 +29,6 @@ Some code modifications are required for the code to run. These edits are not in
 We will use the following function that explicitly declares which modification are made in the source code.
 
 ```{r}
-
 library(tidyverse)
 
 # Not a good practice, only for debugging
@@ -44,13 +43,129 @@ replace_all <- function(x, pattern, replacement) {
 }
 ```
 
-For each file, we will
+The following functions are a series of utilities to save the data to a datalake (based on S3)
+
+```{r}
+library(aws.s3)
+
+# Gather secrets required to work with S3 systems
+if (Sys.info()["sysname"] == "Windows") {
+  if (file.exists("secrets_aws.R")) {
+    source("secrets_aws.R")
+  } else { 
+    print(paste0(
+    "You must save your AWS credentials in a local file named secret_aws.R. ",
+    "For more indications see: https://www.book.utilitr.org/",
+    "sspcloud.html#renouveler-des-droits-dacc%C3%A8s-p%C3%A9rim%C3%A9s"))
+  }
+}
+
+# If running on SSP Cloud, getting the key from vault
+if (Sys.info()["effective_user"] == "onyxia") {
+  system("vault kv get -format=table onyxia-kv/fbedecarrats/species_info", 
+         intern = TRUE) -> my_secret 
+  my_key_zip <- my_secret %>%
+    pluck(18) %>%
+    str_extract("[:alnum:]*$")
+  my_key_api <- my_secret %>%
+    pluck(17) %>%
+    str_extract("[:alnum:]*$")
+} else {
+ my_secret <- readLines("secret_zip_key")
+}
+
+# A function to put data from local machine to S3
+put_to_s3 <- function(x, y) {
+  aws.s3::put_object(
+    file = x,
+    object = y,
+    bucket = "fbedecarrats",
+    region = "",
+    multipart = TRUE)
+}
+
+# A function to iterate/vectorize copy
+save_from_s3 <- function(x, y) {
+  aws.s3::save_object(
+    object = x,
+    bucket = "fbedecarrats",
+    file = y,
+    overwrite = FALSE,
+    region = "")
+}
+
+# Listing files in bucket
+my_files <- get_bucket_df(bucket = "fbedecarrats",
+                          prefix = "Replication_wolf",
+                          region = "")
+```
+
 
 ### Fetch data from Google Earth Engine
 
+Mofify the paths
+
+```{r}
+GEE_data_script <- "PA_matching_asis/001 - dl_GEE.py"
+my_data_input <- paste0(getwd(), "/data_input/")
+replace_all(GEE_data_script, 
+            "/home/chrisgraywolf/shared/analysis/PA_matching/data_input/",
+            my_data_input)
+```
+
+Do-not re-execute this code: fetch existing data instead.
+
+```{r}
+#| eval: false
+GEE_data_script <- "PA_matching_asis/001 - dl_GEE.py"
+source_python(GEE_data_script)
+```
+
+The code below saves the output data to a private data lake.
+
+
+```{r}
+gee_pattern <- "(land|elev|loss|gain|cover|mask|travel_time|pop_dens).*tif"
+# List the outputs of the GEE data fetching
+gee <- list.files(path = "data_input", full.names = TRUE,
+                  pattern = paste0("^", gee_pattern))
+# Transform to specify their location on S3
+gee_s3 <- str_replace(s3, "data_input", "Replication_wolf")
+# Send to S3
+map2(gee, gee_s3 , put_to_s3)
+```
+
+The code below fetches the output data from a private data lake.
+
+```{r}
+# naming pattern of files fetched from Google Earth Engine
+gee_pattern <- "(land|elev|loss|gain|cover|mask|travel_time|pop_dens).*tif"
+# Filter those files from bucket content
+gee_s3 <- my_files %>%
+  filter(str_detect(Key, paste0("Replication_wolf/", gee_pattern))) %>%
+  pluck("Key")
+# rename for local location
+gee_local <- str_replace(gee_s3, "Replication_wolf", "data_input")
+# Copy locally
+map2(gee_s3, gee_local, save_from_s3)
+```
+
+
 ### Fetch species data from IUCN
 
+```{r}
+Sys.getenv()
+```
+
+
+
 ### Compute species richness
+
+```{r}
+system(paste("unzip -P", my_key, "other.zip"))
+file.remove("other.zip")
+```
+
 
 ### Join rasters
 
