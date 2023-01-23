@@ -60,7 +60,9 @@ if (system.file(package = "velox") == "") {
 if (system.file(package = "rnaturalearth") == "") {
   remotes::install_github("https://github.com/ropensci/rnaturalearth")
 } 
-
+if (system.file(package = "gdalUtils") == "") {
+  remotes::install_github("gearslaboratory/gdalUtils")
+} 
 
 
 # Install from CRAN ------------------------------------------------------------
@@ -155,8 +157,11 @@ if (length(missing_packages) > 0) {
   conda_install(envname = my_envname, 
               packages = missing_packages)
 }
-if (!"libstdcxx-ng" %in% py_installed_packages) {
-  conda_install(envname = my_envname, 
+
+# Adding a dependency required on linux platforms
+if ((Sys.info()["sysname"] == "Linux") &
+    (!"libstdcxx-ng" %in% py_installed_packages)) {
+  conda_install(envname = my_envname,
               packages = "libstdcxx-ng")
 }
 
