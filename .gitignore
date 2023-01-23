@@ -14,4 +14,4 @@ data_*/*
 docs/*
 *.zip
 replication_report/*/
-*secrets*
+*secret*
