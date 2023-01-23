@@ -27,14 +27,13 @@ filelist <- unlist(lapply(content(req)$tree, "[", "path"), use.names = F)
 cat(filelist, sep = "\n")
 ```
 
-To assess the reproducibility of this series of code files, we create a copy ("clone" in Github) of this repository at: [https://github.com/fBedecarrats/PA_matching](https://github.com/fBedecarrats/PA_matching).
+To assess the reproducibility of this series of code files, we create a copy ("clone" in Github) of this repository at: <https://github.com/fBedecarrats/PA_matching>.
 
 ## Retrieve data from Google earth engine
 
 Display the content of the first file.
 
 ::: {.callout-code collapse="true"}
-
 ```{r}
 #| echo: false
 #| warning: false
@@ -51,4 +50,3 @@ library(reticulate)
 use_condaenv("replication-wolf")
 
 ```
-
