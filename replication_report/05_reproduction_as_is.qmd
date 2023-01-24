@@ -9,6 +9,8 @@ editor_options:
 We want to make all code modifications transparent, so we download a clean version of Wolf et al. source code.
 
 ```{r}
+# Not a good practice, only for debugging
+# setwd("replication_report")
 # URL pointing to the zip download of the Wolf et al. repository
 repo <- "https://codeload.github.com/wolfch2/PA_matching/zip/refs/heads/master"
 
@@ -20,6 +22,7 @@ unzip("original.zip")
 dir.create("PA_matching_asis")
 file.copy(list.files("PA_matching-master", full.names = TRUE), 
           "PA_matching_asis")
+file.remove("original.zip")
 ```
 
 ## Original source code execution
@@ -30,9 +33,6 @@ We will use the following function that explicitly declares which modification a
 
 ```{r}
 library(tidyverse)
-
-# Not a good practice, only for debugging
-# setwd("replication_report")
 
 # A function to replace some parts of the code
 replace_all <- function(x, pattern, replacement) {
@@ -100,6 +100,17 @@ my_files <- get_bucket_df(bucket = "fbedecarrats",
                           region = "")
 ```
 
+We also re-create the file arborescence
+
+
+```{r create_dirs}
+dir.create("data_input")
+dir.create("data_input/PAs")
+dir.create("temp")
+dir.create("data_processed")
+dir.create("data_processed/rasters")
+```
+
 
 ### Fetch data from Google Earth Engine
 
@@ -123,16 +134,15 @@ source_python(GEE_data_script)
 
 The code below saves the output data to a private data lake.
 
-
 ```{r}
 gee_pattern <- "(land|elev|loss|gain|cover|mask|travel_time|pop_dens).*tif"
 # List the outputs of the GEE data fetching
-gee <- list.files(path = "data_input", full.names = TRUE,
+gee_local <- list.files(path = "data_input", full.names = TRUE,
                   pattern = paste0("^", gee_pattern))
 # Transform to specify their location on S3
-gee_s3 <- str_replace(s3, "data_input", "Replication_wolf")
+gee_to_s3 <- paste0("Replication_wolf/", gee_local)
 # Send to S3
-map2(gee, gee_s3 , put_to_s3)
+map2(gee_local, gee_to_s3 , put_to_s3)
 ```
 
 The code below fetches the output data from a private data lake.
@@ -141,13 +151,14 @@ The code below fetches the output data from a private data lake.
 # naming pattern of files fetched from Google Earth Engine
 gee_pattern <- "(land|elev|loss|gain|cover|mask|travel_time|pop_dens).*tif"
 # Filter those files from bucket content
-gee_s3 <- my_files %>%
-  filter(str_detect(Key, paste0("Replication_wolf/", gee_pattern))) %>%
+gee_in_s3 <- my_files %>%
+  filter(str_detect(Key, 
+                    paste0("Replication_wolf/data_input.", gee_pattern))) %>%
   pluck("Key")
 # rename for local location
-gee_local <- str_replace(gee_s3, "Replication_wolf", "data_input")
+gee_to_local <- str_remove(gee_in_s3, "Replication_wolf/")
 # Copy locally
-map2(gee_s3, gee_local, save_from_s3)
+map2(gee_in_s3, gee_to_local, save_from_s3)
 ```
 
 
