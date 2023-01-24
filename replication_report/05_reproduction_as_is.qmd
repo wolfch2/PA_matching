@@ -35,11 +35,10 @@ We will use the following function that explicitly declares which modification a
 library(tidyverse)
 
 # A function to replace some parts of the code
-replace_all <- function(x, pattern, replacement) {
-  print(x)
-  readLines(x) %>%
+replace_all <- function(pattern, replacement, file) {
+  readLines(file) %>%
     str_replace_all(pattern, replacement) %>%
-    writeLines(x)
+    writeLines(file)
 }
 ```
 
@@ -118,10 +117,11 @@ Mofify the paths
 
 ```{r}
 GEE_data_script <- "PA_matching_asis/001 - dl_GEE.py"
+wolf_path <- "/home/chrisgraywolf/shared/analysis/PA_matching/data_input/"
 my_data_input <- paste0(getwd(), "/data_input/")
-replace_all(GEE_data_script, 
-            "/home/chrisgraywolf/shared/analysis/PA_matching/data_input/",
-            my_data_input)
+replace_all(pattern = wolf_path ,
+            replacement = my_data_input,
+            file = GEE_data_script)
 ```
 
 Do-not re-execute this code: fetch existing data instead.
@@ -167,15 +167,13 @@ The column names in the official BOTW database are now in lowercase. It was appa
 ```{r}
 IUCN_data_script <- "PA_matching_asis/002 - dl_IUCN.R"
 my_wd <- paste0(getwd(), "/")
+wolf_path <- "/home/chrisgraywolf/analysis_desktop/PA_matching/"
 
-replace_all(IUCN_data_script, 
-            "/home/chrisgraywolf/analysis_desktop/PA_matching/",
-            my_wd)
-replace_all(IUCN_data_script, 
-            "put_your_token_here",
-            my_key_api)
+replace_all(pattern = wolf_path, replacement = my_wd, file = IUCN_data_script)
+replace_all(pattern = "put_your_token_here", replacement = my_key_api,
+            file = IUCN_data_script)
 # Column name to lowercase
-replace_all(IUCN_data_script, "SISID", "sisid")
+replace_all(pattern = "SISID", replacement = "sisid", file = IUCN_data_script)
 ```
 
 Add the required input data
@@ -203,14 +201,25 @@ source(IUCN_data_script)
 ```
 ```{r}
 # Save the output data
-# Species data csv (to avoid re-querying IUCN API at each re-run)
+
+# Species data csv ------------------------------------------------------------
 put_to_s3(from = "data_processed/species_data.csv", 
           to = "Replication_wolf/data_processed/species_data.csv")
+
+# Bird shapefiles -------------------------------------------------------------
+# List the bird shapefiles created by 002 - dl_IUCN.R
 bird_shps <- list.files(path = "data_input/range_maps",
                         pattern = "BIRDS_.*", full.names = TRUE)
-system(paste0("zip ", paste(bird_shps, collapse = " "), " -p ", my_key_zip, 
-              "birds_shp.zip"))
+# Bundle them in an encrypted zip locally
+system(paste0("zip -P ", my_key_zip, " birds_shps.zip ",
+       paste(bird_shps, collapse = " ")))
+# Send the local zip to S3
+put_to_s3(from = "birds_shps.zip", 
+          to = "Replication_wolf/data_input/range_maps/birds_shps.zip")
+# Delete the local zip
+file.delete("birds_shps.zip")
 
+# elev.tif --------------------------------------------------------------------
 # The main output of the script.
 put_to_s3(from = "data_processed/rasters/elev.tif", 
           to = "Replication_wolf/data_processed/rasters/elev.tif")
@@ -219,6 +228,16 @@ put_to_s3(from = "data_processed/rasters/elev.tif",
 # Load the data 
 save_from_s3(from = "Replication_wolf/data_processed/species_data.csv",
              to = "data_processed/species_data.csv")
+
+# Fetch birds from S3
+save_from_s3(from = "Replication_wolf/data_input/range_maps/birds_shps.zip",
+             to = "birds_shp.zip")
+system(paste("unzip -P", my_key_zip, "birds_shp.zip", 
+             " -d data_input/range_maps/"))
+file.remove("birds_shp.zip")
+
+put_to_s3(from = "birds_shps.zip", 
+          to = "Replication_wolf/data_input/range_maps/birds_shps.zip")
 # species_data <- read_csv("data_processed/species_data.csv")
 save_from_s3(from = "Replication_wolf/data_processed/rasters/elev.tif",
              to = "data_processed/rasters/elev.tif")
@@ -226,10 +245,49 @@ save_from_s3(from = "Replication_wolf/data_processed/rasters/elev.tif",
 
 ### Compute species richness
 
+We need to replace the specific path used by Wolf et al with a more generic path.
+18 python packages and package modules are imported by the script but are not used in the analysis. We comment them to avoid dependency complications.
+The ray package is designed to work with some virtual memory that is not present on our configuration. We need to add a mention an option to enable ray to work with physical memory.
+We also need to modify the following command `richness = results[0]`, as it correspond to a method to assign an array that is not allowed in recent numpy versions and returns an error. We therefore add `.copy()` to this command, to have `richness = results[0].copy()`, which now correspond to the correct way of proceeding with this operation in python.
+
 ```{r}
-system(paste("unzip -P", my_key, "other.zip"))
-file.remove("other.zip")
+# Set target
+species_richness_script <- "PA_matching_asis/003 - species_richness.py"
+# change patk
+replace_all(pattern = "/home/chrisgraywolf/analysis_desktop/PA_matching/",
+            replacement = paste0(getwd(), "/"),
+            file = species_richness_script)
+
+# List unused packages and modules
+unused_packages <- c("affine", "ctypes", "functools", "geojson", "geopandas", 
+                     "glob", "math", "matplotlib", "multiprocessing", 
+                     "operator", "psutil", "random", "shapely")
+unused_package_modules <- c("collections", "fiona", "osgeo", "pyproj")
+
+# Comment the corresponding lines
+map(unused_packages, ~replace_all(pattern = paste0("^import ", .x, ".*$"), 
+                                  replacement = "\\# \\0",
+                                  file = species_richness_script))
+map(unused_package_modules, ~replace_all(pattern = paste0("^from ", .x, ".*$"), 
+                                         replacement = "\\# \\0",
+                                         file = species_richness_script))
+# Add option to enable ray to use physical memory
+ray_to_add <- paste("import os",
+                    "os.environ[\"RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE\"] = \"1\"",
+                    "import ray",
+                    sep = "\n")
+replace_all(pattern = "import ray",
+            replacement = ray_to_add,
+            file = species_richness_script)
 ```
+
+Run the file
+
+```{r}
+library(reticulate)
+source_python(species_richness_script)
+```
+
 
 
 ### Join rasters
