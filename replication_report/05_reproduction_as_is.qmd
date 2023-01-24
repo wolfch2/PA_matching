@@ -181,11 +181,18 @@ replace_all(IUCN_data_script, "SISID", "sisid")
 Add the required input data
 
 ```{r}
-range_maps_s3 <- my_files %>%
-  filter(str_detect(Key, "/range_maps/")) %>%
-  pluck("Key")
-range_maps_local <- str_remove(range_maps_s3, "Replication_wolf/")
-map2(range_maps_s3, range_maps_local, save_from_s3)
+# Fetch and unzip range maps
+# Range maps are zip encrypted
+# Secrets are stored in a Vault accessed above
+save_from_s3(from = "Replication_wolf/data_input/range_maps/iucn_species_classes.zip",
+             to = "iucn_species_classes.zip")
+system(paste("unzip -P", my_key_zip, "iucn_species_classes.zip"))
+file.remove("iucn_species_classes.zip")
+
+save_from_s3(from = "Replication_wolf/data_input/range_maps/BOTW.zip",
+             to = "BOTW.zip")
+system(paste("unzip -P", my_key_zip, "BOTW.zip", " -d data_input/range_maps/"))
+file.remove("BOTW.zip")
 ```
 
 
