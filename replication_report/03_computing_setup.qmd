@@ -226,6 +226,15 @@ The script `002 - dl_IUCN.R` includes a system command that `wget` that refers t
 
 On Linux, if `wget` is not available, the user must run the same commands without `wsl`, that is run the command `sudo apt-get update` followed by the command `sudo apt-get install parallel`.
 
+```{r}
+if (Sys.info()["sysname"] == "Linux") {
+  system("sudo apt update")
+  system("sudo apt install -y parallel")
+} 
+```
+
+
+
 ```{r wget_for_windows}
 #| eval: false
 
