@@ -75,21 +75,21 @@ if (Sys.info()["effective_user"] == "onyxia") {
 }
 
 # A function to put data from local machine to S3
-put_to_s3 <- function(x, y) {
+put_to_s3 <- function(from, to) {
   aws.s3::put_object(
-    file = x,
-    object = y,
+    file = from,
+    object = to,
     bucket = "fbedecarrats",
     region = "",
     multipart = TRUE)
 }
 
 # A function to iterate/vectorize copy
-save_from_s3 <- function(x, y) {
+save_from_s3 <- function(from, to) {
   aws.s3::save_object(
-    object = x,
+    object = from,
     bucket = "fbedecarrats",
-    file = y,
+    file = to,
     overwrite = FALSE,
     region = "")
 }
@@ -153,11 +153,55 @@ map2(gee_s3, gee_local, save_from_s3)
 
 ### Fetch species data from IUCN
 
+Modify the script to enable it to run on another machine.
+
+The column names in the official BOTW database are now in lowercase. It was apparently in uppercase when Wolf et al. processed the data. We need to modify the reference to one column name in the script for it to run. 
+
 ```{r}
-Sys.getenv()
+IUCN_data_script <- "PA_matching_asis/002 - dl_IUCN.R"
+my_wd <- paste0(getwd(), "/")
+
+replace_all(IUCN_data_script, 
+            "/home/chrisgraywolf/analysis_desktop/PA_matching/",
+            my_wd)
+replace_all(IUCN_data_script, 
+            "put_your_token_here",
+            my_key_api)
+# Column name to lowercase
+replace_all(IUCN_data_script, "SISID", "sisid")
 ```
 
+Run the script
 
+```{r}
+source(IUCN_data_script)
+```
+
+Save the output data
+
+```{r}
+# Species data csv (to avoid re-querying IUCN API at each re-run)
+put_to_s3(from = "data_processed/species_data.csv", 
+          to = "Replication_wolf/data_processed/species_data.csv")
+bird_shps <- list.files(path = "data_input/range_maps",
+                        pattern = "BIRDS_.*", full.names = TRUE)
+system(paste0("zip ", paste(bird_shps, collapse = " "), " -p ", my_key_zip, 
+              "birds_shp.zip"))
+
+# The main output of the script.
+put_to_s3(from = "data_processed/rasters/elev.tif", 
+          to = "Replication_wolf/data_processed/rasters/elev.tif")
+```
+
+Load the data 
+
+```{r}
+save_from_s3(from = "Replication_wolf/data_processed/species_data.csv",
+             to = "data_processed/species_data.csv")
+# species_data <- read_csv("data_processed/species_data.csv")
+save_from_s3(from = "Replication_wolf/data_processed/rasters/elev.tif",
+             to = "data_processed/rasters/elev.tif")
+```
 
 ### Compute species richness
 
