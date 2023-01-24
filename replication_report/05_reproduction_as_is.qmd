@@ -131,10 +131,8 @@ Do-not re-execute this code: fetch existing data instead.
 GEE_data_script <- "PA_matching_asis/001 - dl_GEE.py"
 source_python(GEE_data_script)
 ```
-
-The code below saves the output data to a private data lake.
-
 ```{r}
+# The code below saves the output data to a private data lake.
 gee_pattern <- "(land|elev|loss|gain|cover|mask|travel_time|pop_dens).*tif"
 # List the outputs of the GEE data fetching
 gee_local <- list.files(path = "data_input", full.names = TRUE,
@@ -144,10 +142,8 @@ gee_to_s3 <- paste0("Replication_wolf/", gee_local)
 # Send to S3
 map2(gee_local, gee_to_s3 , put_to_s3)
 ```
-
-The code below fetches the output data from a private data lake.
-
 ```{r}
+# The code below fetches the output data from a private data lake.
 # naming pattern of files fetched from Google Earth Engine
 gee_pattern <- "(land|elev|loss|gain|cover|mask|travel_time|pop_dens).*tif"
 # Filter those files from bucket content
@@ -182,15 +178,24 @@ replace_all(IUCN_data_script,
 replace_all(IUCN_data_script, "SISID", "sisid")
 ```
 
+Add the required input data
+
+```{r}
+range_maps_s3 <- my_files %>%
+  filter(str_detect(Key, "/range_maps/")) %>%
+  pluck("Key")
+range_maps_local <- str_remove(range_maps_s3, "Replication_wolf/")
+map2(range_maps_s3, range_maps_local, save_from_s3)
+```
+
+
 Run the script
 
 ```{r}
 source(IUCN_data_script)
 ```
-
-Save the output data
-
 ```{r}
+# Save the output data
 # Species data csv (to avoid re-querying IUCN API at each re-run)
 put_to_s3(from = "data_processed/species_data.csv", 
           to = "Replication_wolf/data_processed/species_data.csv")
@@ -203,10 +208,8 @@ system(paste0("zip ", paste(bird_shps, collapse = " "), " -p ", my_key_zip,
 put_to_s3(from = "data_processed/rasters/elev.tif", 
           to = "Replication_wolf/data_processed/rasters/elev.tif")
 ```
-
-Load the data 
-
 ```{r}
+# Load the data 
 save_from_s3(from = "Replication_wolf/data_processed/species_data.csv",
              to = "data_processed/species_data.csv")
 # species_data <- read_csv("data_processed/species_data.csv")
