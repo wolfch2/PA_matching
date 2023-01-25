@@ -147,7 +147,7 @@ if (!my_envname %in% conda_list()$name) {
 # Packages needed for each script
 requirements <- list(
   "001" = c("earthengine-api", "rasterio", "pandas", "pydrive"),
-  "003" = c("fiona", "rasterio", "ray", "dbfread", "pandas"))
+  "003" = c("fiona", "rasterio", "ray[default]", "dbfread", "pandas"))
 # Combined depending on the variable defined at beginning of code chunk
 required <- unique(unlist(requirements[scripts_to_run]))
 # identify which ones are missing
@@ -171,6 +171,57 @@ if (length(missing_packages) > 0) {
 # Activate the corresponding environment
 use_condaenv(my_envname)
 ```
+
+```{r setup_py2}
+#| eval: false
+
+library(reticulate) # to run python from R
+
+# Variables to modify
+my_envname <- "replication-wolf2"
+
+# py_list_packages(my_envname)
+# system("strings /usr/lib/x86_64-linux-gnu/libstdc++.so.6 | grep GLIBCXX")
+# system('conda install -c "conda-forge/label/gcc7" libstdcxx-ng')
+# 
+# conda_install()
+
+# Install python if not already present
+if (!dir.exists(miniconda_path())) {
+  install_miniconda()
+}
+
+# Create environment if not already
+if (my_envname %in% conda_list()$name) {
+  conda_remove(my_envname)
+} 
+conda_create(my_envname)
+
+requirements_pip <- c("fiona", "ray[default]", "rasterio", "ray", "dbfread", "pandas")
+requirements_conda <- c("libstdcxx-ng")
+
+# identify which ones are missing
+py_installed_packages <- py_list_packages(my_envname)$package
+missing_pip <- requirements_pip[!requirements_pip %in% py_installed_packages]
+missing_conda <- requirements_conda[!requirements_conda %in%
+                                      py_installed_packages]
+
+# Install those
+if (length(missing_pip) > 0) {
+  conda_install(envname = my_envname, 
+              packages = missing_pip,
+              pip = TRUE)
+}
+if (length(missing_conda) > 0) {
+  conda_install(envname = my_envname, 
+              packages = missing_conda)
+}
+
+# Activate the corresponding environment
+use_condaenv(my_envname)
+```
+```
+
 
 Create an authorization
 
