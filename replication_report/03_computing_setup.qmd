@@ -132,13 +132,14 @@ if(any(missing)) install.packages(required_packages[missing],
 library(reticulate) # to run python from R
 
 # Variables to modify
-my_envname <- "replication-wolf4"
+my_envname <- "replication-wolf"
 scripts_to_run <- c("003") # or c("001", "003") or "001"
 
 # Install python if not already present
 if (!dir.exists(miniconda_path())) {
   install_miniconda()
 }
+# conda_remove(my_envname) # for debugging purposes
 # Create environment if not already
 if (!my_envname %in% conda_list()$name) {
   conda_create(my_envname)
