@@ -245,7 +245,7 @@ system(paste0("zip -P ", my_key_zip, " birds_shps.zip ",
 put_to_s3(from = "birds_shps.zip", 
           to = "Replication_wolf/data_input/range_maps/birds_shps.zip")
 # Delete the local zip
-file.delete("birds_shps.zip")
+file.remove("birds_shps.zip")
 
 # elev.tif --------------------------------------------------------------------
 # The main output of the script.
@@ -261,10 +261,10 @@ save_from_s3(from = "Replication_wolf/data_processed/species_data.csv",
 
 # Fetch birds from S3
 save_from_s3(from = "Replication_wolf/data_input/range_maps/birds_shps.zip",
-             to = "birds_shp.zip")
+             to = "birds_shps.zip")
 system(paste("unzip -P", my_key_zip, "birds_shp.zip", 
              " -d data_input/range_maps/"))
-file.remove("birds_shp.zip")
+file.remove("birds_shps.zip")
 
 # species_data <- read_csv("data_processed/species_data.csv")
 save_from_s3(from = "Replication_wolf/data_processed/rasters/elev.tif",
@@ -315,7 +315,6 @@ Run the file
 
 ```{r}
 #| eval: false
-
 
 library(reticulate)
 my_envname <- "replication-wolf"
