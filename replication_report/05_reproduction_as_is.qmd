@@ -9,12 +9,15 @@ editor_options:
 We want to make all code modifications transparent, so we download a clean version of Wolf et al. source code.
 
 ```{bash}
+#| eval: false
 conda create --name replication-wolf --file replication_report/requirements.txt
 conda activate replication-wolf
 ```
 
 
 ```{r}
+#| eval: true
+
 # Not a good practice, only for debugging
 # setwd("replication_report")
 # URL pointing to the zip download of the Wolf et al. repository
@@ -38,6 +41,8 @@ Some code modifications are required for the code to run. These edits are not in
 We will use the following function that explicitly declares which modification are made in the source code.
 
 ```{r}
+#| eval: true
+
 library(tidyverse)
 
 # A function to replace some parts of the code
@@ -51,6 +56,8 @@ replace_all <- function(pattern, replacement, file) {
 The following functions are a series of utilities to save the data to a datalake (based on S3)
 
 ```{r}
+#| eval: true
+
 library(aws.s3)
 
 # Gather secrets required to work with S3 systems
@@ -109,6 +116,8 @@ We also re-create the file arborescence
 
 
 ```{r create_dirs}
+#| eval: true
+
 dir.create("data_input")
 dir.create("data_input/PAs")
 dir.create("temp")
@@ -122,6 +131,7 @@ dir.create("data_processed/rasters")
 Mofify the paths
 
 ```{r}
+#| eval: true
 GEE_data_script <- "PA_matching_asis/001 - dl_GEE.py"
 wolf_path <- "/home/chrisgraywolf/shared/analysis/PA_matching/data_input/"
 my_data_input <- paste0(getwd(), "/data_input/")
@@ -138,6 +148,8 @@ GEE_data_script <- "PA_matching_asis/001 - dl_GEE.py"
 source_python(GEE_data_script)
 ```
 ```{r}
+#| eval: false
+
 # The code below saves the output data to a private data lake.
 gee_pattern <- "(land|elev|loss|gain|cover|mask|travel_time|pop_dens).*tif"
 # List the outputs of the GEE data fetching
@@ -149,6 +161,8 @@ gee_to_s3 <- paste0("Replication_wolf/", gee_local)
 map2(gee_local, gee_to_s3 , put_to_s3)
 ```
 ```{r}
+#| eval: true
+
 # The code below fetches the output data from a private data lake.
 # naming pattern of files fetched from Google Earth Engine
 gee_pattern <- "(land|elev|loss|gain|cover|mask|travel_time|pop_dens).*tif"
@@ -171,6 +185,8 @@ Modify the script to enable it to run on another machine.
 The column names in the official BOTW database are now in lowercase. It was apparently in uppercase when Wolf et al. processed the data. We need to modify the reference to one column name in the script for it to run. 
 
 ```{r}
+#| eval: true
+
 IUCN_data_script <- "PA_matching_asis/002 - dl_IUCN.R"
 my_wd <- paste0(getwd(), "/")
 wolf_path <- "/home/chrisgraywolf/analysis_desktop/PA_matching/"
@@ -185,6 +201,8 @@ replace_all(pattern = "SISID", replacement = "sisid", file = IUCN_data_script)
 Add the required input data
 
 ```{r}
+#| eval: true
+
 # Fetch and unzip range maps
 # Range maps are zip encrypted
 # Secrets are stored in a Vault accessed above
@@ -203,9 +221,13 @@ file.remove("BOTW.zip")
 Run the script
 
 ```{r}
+#| eval: false
+
 source(IUCN_data_script)
 ```
 ```{r}
+#| eval: false
+
 # Save the output data
 
 # Species data csv ------------------------------------------------------------
@@ -231,6 +253,8 @@ put_to_s3(from = "data_processed/rasters/elev.tif",
           to = "Replication_wolf/data_processed/rasters/elev.tif")
 ```
 ```{r}
+#| eval: true
+
 # Load the data 
 save_from_s3(from = "Replication_wolf/data_processed/species_data.csv",
              to = "data_processed/species_data.csv")
@@ -242,8 +266,6 @@ system(paste("unzip -P", my_key_zip, "birds_shp.zip",
              " -d data_input/range_maps/"))
 file.remove("birds_shp.zip")
 
-put_to_s3(from = "birds_shps.zip", 
-          to = "Replication_wolf/data_input/range_maps/birds_shps.zip")
 # species_data <- read_csv("data_processed/species_data.csv")
 save_from_s3(from = "Replication_wolf/data_processed/rasters/elev.tif",
              to = "data_processed/rasters/elev.tif")
@@ -257,6 +279,8 @@ The ray package is designed to work with some virtual memory that is not present
 We also need to modify the following command `richness = results[0]`, as it correspond to a method to assign an array that is not allowed in recent numpy versions and returns an error. We therefore add `.copy()` to this command, to have `richness = results[0].copy()`, which now correspond to the correct way of proceeding with this operation in python.
 
 ```{r}
+#| eval: true
+
 # Set target
 species_richness_script <- "PA_matching_asis/003 - species_richness.py"
 # change patk
@@ -290,8 +314,11 @@ replace_all(pattern = "import ray",
 Run the file
 
 ```{r}
+#| eval: false
+
+
 library(reticulate)
-my_envname <- "replication-wolf4"
+my_envname <- "replication-wolf"
 use_condaenv(my_envname)
 species_richness_script <- "PA_matching_asis/003 - species_richness.py"
 source_python(species_richness_script)
@@ -319,6 +346,8 @@ There is a typo on line 136: an object called `PA_dists` is called but no object
 
 
 ```{r}
+#| eval: false
+
 join_script <- "PA_matching_asis/004 - join_rasters.R"
 # Change the working directory location
 replace_all(join_script, # in the original script
@@ -350,6 +379,8 @@ replace_all(join_script,
 Execute the code
 
 ```{r}
+#| eval: false
+
 source(join_script)
 ```
 
@@ -357,6 +388,8 @@ source(join_script)
 
 
 ```{r}
+#| eval: false
+
 matching_script <- "PA_matching_asis/005 - covariate_matching.jl"
 
 my_wd <- paste0(getwd(), "/")
@@ -370,7 +403,9 @@ replace_all(matching_script, # in the original script
 
 
 ```{r}
-#| eval: true
+#| eval: false
+
+
 library(JuliaCall)
 julia_source(matching_script)
 ```
