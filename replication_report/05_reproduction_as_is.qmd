@@ -18,6 +18,7 @@ We want to make all code modifications transparent, so we download a clean versi
 ```{r}
 #| eval: true
 
+setwd("/home/onyxia/work/PA_matching/replication_report")
 # Not a good practice, only for debugging
 # setwd("replication_report")
 # URL pointing to the zip download of the Wolf et al. repository
@@ -30,7 +31,7 @@ unzip("original.zip")
 # original folder will remain intact, we make a copy with required edits to run
 dir.create("PA_matching_asis")
 file.copy(list.files("PA_matching-master", full.names = TRUE), 
-          "PA_matching_asis")
+          "PA_matching_asis", overwrite = TRUE)
 file.remove("original.zip")
 ```
 
@@ -399,11 +400,15 @@ replace_all(pattern = "WDPA_Jan2020",
             replacement = "WDPA_Jan2023",
             file = join_script)
 # Replace url to download WWF data
-old <- "https://c402277.ssl.cf1.rackcdn.com/publications/15/files/original/official_teow.zip?1349272619"
+old <- "https://c402277.ssl.cf1.rackcdn.com/publications/15/files/original/official_teow.zip\\?1349272619"
 new <- "https://files.worldwildlife.org/wwfcmsprod/files/Publication/file/6kcchn7e3u_official_teow.zip"
 replace_all(pattern = old,
             replacement = new,
             file = join_script)
+replace_all(pattern = "data_input/official_teow.zip\\?1349272619",
+            replacement = "data_input/6kcchn7e3u_official_teow.zip",
+            file = join_script)
+
 # Correct the typo in the code
 replace_all(pattern = "PAs_buffer = PA_dists <= 10e3",
             replacement = "PAs_buffer = PAs_dist <= 10e3",
@@ -436,6 +441,42 @@ my_biomes_dest <- my_biomes %>%
 map2(my_biomes, my_biomes_dest, save_from_s3)
 
 ```
+```{r save_join_raster_output}
+#| eval: false
+
+# Save outputs
+# List present tifs
+processed_tifs_local <- list.files(path = "data_processed",
+                                   pattern = ".*tif",
+                                   recursive = TRUE,
+                                   full.names = TRUE)
+# See which are not already in S3
+processed_tifs_s3 <- my_files %>%
+  filter(str_detect(Key, "data_processed") & str_ends(Key, "tif")) %>%
+  mutate(path = str_remove(Key, "Replication_wolf/")) %>%
+  pluck("path")
+to_put_s3 <- processed_tifs_local[!processed_tifs_local %in% processed_tifs_s3]
+path_in_s3 <- paste0("Replication_wolf/", to_put_s3)
+# Put them in S3
+map2(to_put_s3, path_in_s3, put_to_s3)
+```
+```{r fetch_join_raster_output}
+#| eval: true
+processed_tifs_s3 <- my_files %>%
+  filter(str_detect(Key, "data_processed") & str_ends(Key, "tif")) %>%
+  mutate(path = str_remove(Key, "Replication_wolf/")) %>%
+  pluck("path")
+processed_tifs_local <- list.files(path = "data_processed",
+                                   pattern = ".*tif",
+                                   recursive = TRUE,
+                                   full.names = TRUE)
+to_save_local <- processed_tifs_s3[!processed_tifs_s3 %in% processed_tifs_local]
+
+if (length(to_save_local) > 0) {
+  path_s3_to_local <- paste0("Replication_wolf/", to_save_local)
+  map2(path_s3_to_local, to_save_local, save_from_s3)
+}
+```
 
 
 Execute the code
@@ -446,6 +487,22 @@ Execute the code
 join_script <- "PA_matching_asis/004 - join_rasters.R"
 source(join_script)
 ```
+
+Note : Message bizarre suite à lignes 78-93
+
+```
+ERROR 4: : No such file or directory
+Warning 1: Can't open . Skipping it
+ERROR 4: data_input/lossyear.vrt: No such file or directory
+Warning messages:
+1: In system(cmd, intern = TRUE) :
+  running command '"/usr/bin/gdalbuildvrt" "data_input/lossyear.vrt" ""' had status 1
+2: In system(cmd, intern = TRUE) :
+  running command '"/usr/bin/gdalwarp" -te -17367530.4451614 -7342769.86350132 17366469.5548386 7342230.13649868 -tr 1000 1000 -t_srs "+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +datum=WGS84 +ellps=WGS84 +units=m +no_defs" -of "VRT" "data_input/lossyear.vrt" "data_input/lossyear_proj.vrt"' had status 2
+```
+
+
+
 
 ### Match pixels on covariates
 
@@ -458,9 +515,9 @@ matching_script <- "PA_matching_asis/005 - covariate_matching.jl"
 my_wd <- paste0(getwd(), "/")
 
 # Change the working directory location
-replace_all(matching_script, # in the original script
-            "\"/home/chrisgraywolf/shared/analysis/PA_matching/\"", 
-            my_wd) # keep the current working directory instead
+replace_all(pattern = "/home/chrisgraywolf/shared/analysis/PA_matching/", 
+            replacement = my_wd,
+            file = matching_script)
 ```
 
 
@@ -468,8 +525,8 @@ replace_all(matching_script, # in the original script
 ```{r}
 #| eval: false
 
-
 library(JuliaCall)
+
 julia_source(matching_script)
 ```
 
