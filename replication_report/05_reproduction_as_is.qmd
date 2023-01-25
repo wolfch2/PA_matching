@@ -8,10 +8,10 @@ editor_options:
 
 We want to make all code modifications transparent, so we download a clean version of Wolf et al. source code.
 
-```{bash}
+```{r}
 #| eval: false
-conda create --name replication-wolf --file replication_report/requirements.txt
-conda activate replication-wolf
+# conda create --name replication-wolf --file replication_report/requirements.txt
+# conda activate replication-wolf
 ```
 
 
@@ -270,6 +270,7 @@ file.remove("birds_shps.zip")
 # species_data <- read_csv("data_processed/species_data.csv")
 save_from_s3(from = "Replication_wolf/data_processed/rasters/elev.tif",
              to = "data_processed/rasters/elev.tif")
+
 ```
 
 ### Compute species richness
@@ -333,12 +334,23 @@ species_richness_script <- "PA_matching_asis/003 - species_richness.py"
 source_python(species_richness_script)
 ```
 ```{r}
+#| eval: false
+
 # Save outputs
 put_to_s3(from = "data_processed/non-threatened.tif", 
           to = "Replication_wolf/data_processed/non-threatened.tif")
 put_to_s3(from = "data_processed/threatened.tif", 
           to = "Replication_wolf/data_processed/threatened.tif")
+```
+```{r}
+#| eval: true
 
+# Fetch outputs
+# Save outputs
+save_from_s3(from = "Replication_wolf/data_processed/non-threatened.tif", 
+             to = "data_processed/non-threatened.tif")
+save_from_s3(from = "Replication_wolf/data_processed/threatened.tif", 
+             to = "data_processed/threatened.tif")
 ```
 
 
@@ -363,41 +375,75 @@ There is a typo on line 136: an object called `PA_dists` is called but no object
 
 
 ```{r}
-#| eval: false
+#| eval: true
 
 join_script <- "PA_matching_asis/004 - join_rasters.R"
+my_wd <- paste0(getwd(), "/")
 # Change the working directory location
-replace_all(join_script, # in the original script
-            "\"/home/chrisgraywolf/shared/analysis/PA_matching/\"", 
-            "paste0(getwd(), \"/\")") # keep the current working directory instead
-
-replace_all(join_script, # Replace Science URL that has changed
-            "https://science.sciencemag.org/highwire/filestream/715492/field_highwire_adjunct_files/2/aau3445-Data-S3.tif", 
-             "https://www.science.org/action/downloadSupplement?doi=10.1126%2Fscience.aau3445&file=aau3445-data-s3.tif")
+replace_all(pattern = "/home/chrisgraywolf/shared/analysis/PA_matching/", 
+            replacement = my_wd,
+            file = join_script)
+# Replace Science URL that has changed
+old <- "https://science.sciencemag.org/highwire/filestream/715492/field_highwire_adjunct_files/2/aau3445-Data-S3.tif"
+new <- "https://www.science.org/action/downloadSupplement?doi=10.1126%2Fscience.aau3445&file=aau3445-data-s3.tif"
+replace_all(pattern = old,
+            replacement = new,
+            file = join_script)
 # Replace Curtis et al filename: lowercased by Science portal admins
-replace_all(join_script, 
-            "data_input/aau3445-Data-S3.tif",
-            "data_input/aau3445-data-s3.tif")
+replace_all(pattern = "data_input/aau3445-Data-S3.tif",
+            replacement = "data_input/aau3445-data-s3.tif",
+            file = join_script)
 # We have not found a way to fetch a previous version of the WDPA database
 # January 2023 is the one we use.
-replace_all(join_script, 
-            "WDPA_Jan2020",
-            "WDPA_Jan2023")
+replace_all(pattern = "WDPA_Jan2020",
+            replacement = "WDPA_Jan2023",
+            file = join_script)
 # Replace url to download WWF data
-replace_all(join_script, 
-            "https://c402277.ssl.cf1.rackcdn.com/publications/15/files/original/official_teow.zip?1349272619",
-            "https://files.worldwildlife.org/wwfcmsprod/files/Publication/file/6kcchn7e3u_official_teow.zip")
+old <- "https://c402277.ssl.cf1.rackcdn.com/publications/15/files/original/official_teow.zip?1349272619"
+new <- "https://files.worldwildlife.org/wwfcmsprod/files/Publication/file/6kcchn7e3u_official_teow.zip"
+replace_all(pattern = old,
+            replacement = new,
+            file = join_script)
 # Correct the typo in the code
-replace_all(join_script, 
-            "PAs_buffer = PA_dists <= 10e3",
-            "PAs_buffer = PAs_dist <= 10e3")
+replace_all(pattern = "PAs_buffer = PA_dists <= 10e3",
+            replacement = "PAs_buffer = PAs_dist <= 10e3",
+            file = join_script)
 ```
+
+Gather data
+
+```{r}
+#| eval: true
+
+# Select PA shp
+my_PAs <- my_files %>%
+  filter(str_detect(Key, "/PAs/WDPA")) %>%
+  pluck("Key")
+# Create paths in local machine
+my_PAs_dest <- my_PAs %>%
+  str_remove("Replication_wolf/")
+# Retrieve the data
+map2(my_PAs, my_PAs_dest, save_from_s3)
+
+# Select WWF shp
+my_biomes <- my_files %>%
+  filter(str_detect(Key, "/official/")) %>%
+  pluck("Key")
+# Create paths in local machine
+my_biomes_dest <- my_biomes %>%
+   str_remove("Replication_wolf/")
+# Retrieve the data
+map2(my_biomes, my_biomes_dest, save_from_s3)
+
+```
+
 
 Execute the code
 
 ```{r}
 #| eval: false
 
+join_script <- "PA_matching_asis/004 - join_rasters.R"
 source(join_script)
 ```
 
