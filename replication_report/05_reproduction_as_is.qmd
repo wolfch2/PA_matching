@@ -58,6 +58,7 @@ The following functions are a series of utilities to save the data to a datalake
 ```{r}
 #| eval: true
 
+library(tidyverse)
 library(aws.s3)
 
 # Gather secrets required to work with S3 systems
@@ -283,7 +284,7 @@ We also need to modify the following command `richness = results[0]`, as it corr
 
 # Set target
 species_richness_script <- "PA_matching_asis/003 - species_richness.py"
-# change patk
+# change path
 replace_all(pattern = "/home/chrisgraywolf/analysis_desktop/PA_matching/",
             replacement = paste0(getwd(), "/"),
             file = species_richness_script)
@@ -313,6 +314,11 @@ replace_all(pattern = "import ray",
 replace_all(pattern = "pool = ray.experimental.ActorPool(actors)",
             replacement = "pool = ray.util.ActorPool(actors)",
             file = species_richness_script)
+# Correct array assignment
+replace_all(pattern = "richness = results[0]$",
+            replacement = "richness = results[0].copy()$",
+            file = species_richness_script)
+
 ```
 
 Run the file
@@ -325,6 +331,14 @@ my_envname <- "replication-wolf2"
 use_condaenv(my_envname)
 species_richness_script <- "PA_matching_asis/003 - species_richness.py"
 source_python(species_richness_script)
+```
+```{r}
+# Save outputs
+put_to_s3(from = "data_processed/non-threatened.tif", 
+          to = "Replication_wolf/data_processed/non-threatened.tif")
+put_to_s3(from = "data_processed/threatened.tif", 
+          to = "Replication_wolf/data_processed/threatened.tif")
+
 ```
 
 
