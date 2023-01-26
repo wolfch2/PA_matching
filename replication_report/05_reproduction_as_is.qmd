@@ -420,6 +420,10 @@ Gather data
 ```{r}
 #| eval: true
 
+# Listing files in bucket
+my_files <- get_bucket_df(bucket = "fbedecarrats",
+                          prefix = "Replication_wolf",
+                          region = "")
 # Select PA shp
 my_PAs <- my_files %>%
   filter(str_detect(Key, "/PAs/WDPA")) %>%
@@ -441,37 +445,58 @@ my_biomes_dest <- my_biomes %>%
 map2(my_biomes, my_biomes_dest, save_from_s3)
 
 ```
+
+Run script
+
+```{r run_join_script}
+join_script <- "PA_matching_asis/004 - join_rasters.R"
+source(join_script)
+```
+
+Save outputs
+
 ```{r save_join_raster_output}
 #| eval: false
 
 # Save outputs
 # List present tifs
-processed_tifs_local <- list.files(path = "data_processed",
-                                   pattern = ".*tif",
-                                   recursive = TRUE,
-                                   full.names = TRUE)
 # See which are not already in S3
-processed_tifs_s3 <- my_files %>%
-  filter(str_detect(Key, "data_processed") & str_ends(Key, "tif")) %>%
+processed_local <- list.files(path = "data_processed",
+                              recursive = TRUE,
+                              full.names = TRUE) %>%
+  str_subset(., "vrt$", negate = TRUE)
+# Listing files in bucket
+my_files <- get_bucket_df(bucket = "fbedecarrats",
+                          prefix = "Replication_wolf",
+                          region = "")
+processed_s3 <- my_files %>%
+  filter(str_detect(Key, "/data_processed/")) %>%
   mutate(path = str_remove(Key, "Replication_wolf/")) %>%
   pluck("path")
-to_put_s3 <- processed_tifs_local[!processed_tifs_local %in% processed_tifs_s3]
+to_put_s3 <- processed_local[!processed_local %in% processed_s3]
+to_put_s3
 path_in_s3 <- paste0("Replication_wolf/", to_put_s3)
 # Put them in S3
 map2(to_put_s3, path_in_s3, put_to_s3)
 ```
 ```{r fetch_join_raster_output}
 #| eval: true
-processed_tifs_s3 <- my_files %>%
-  filter(str_detect(Key, "data_processed") & str_ends(Key, "tif")) %>%
+
+# Listing files in bucket
+my_files <- get_bucket_df(bucket = "fbedecarrats",
+                          prefix = "Replication_wolf",
+                          region = "") %>%
+  filter(str_detect(Key, "keep$", negate = TRUE))
+
+processed_s3 <- my_files %>%
+  filter(str_detect(Key, "data_processed")) %>%
   mutate(path = str_remove(Key, "Replication_wolf/")) %>%
   pluck("path")
-processed_tifs_local <- list.files(path = "data_processed",
-                                   pattern = ".*tif",
+processed_local <- list.files(path = "data_processed",
                                    recursive = TRUE,
                                    full.names = TRUE)
-to_save_local <- processed_tifs_s3[!processed_tifs_s3 %in% processed_tifs_local]
-
+to_save_local <- processed_s3[!processed_s3 %in% processed_local]
+to_save_local
 if (length(to_save_local) > 0) {
   path_s3_to_local <- paste0("Replication_wolf/", to_save_local)
   map2(path_s3_to_local, to_save_local, save_from_s3)
