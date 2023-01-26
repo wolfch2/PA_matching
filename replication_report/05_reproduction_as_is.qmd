@@ -543,6 +543,13 @@ my_wd <- paste0(getwd(), "/")
 replace_all(pattern = "/home/chrisgraywolf/shared/analysis/PA_matching/", 
             replacement = my_wd,
             file = matching_script)
+
+# Need to specify the DataFrame in csv 
+replace_all(pattern = "PA_df = CSV.read(\"data_processed/PAs_tab.csv\")", 
+            replacement = "PA_df = CSV.read(\"data_processed/PAs_tab.csv\", DataFrame)",
+            file = matching_script)
+
+
 ```
 
 
