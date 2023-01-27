@@ -118,7 +118,7 @@ We also re-create the file arborescence
 
 
 ```{r create_dirs}
-#| eval: true
+#| eval: false
 
 dir.create("data_input")
 dir.create("data_input/PAs")
@@ -149,7 +149,7 @@ Do-not re-execute this code: fetch existing data instead.
 GEE_data_script <- "PA_matching_asis/001 - dl_GEE.py"
 source_python(GEE_data_script)
 ```
-```{r}
+```{r save_gee_output}
 #| eval: false
 
 # The code below saves the output data to a private data lake.
@@ -162,8 +162,10 @@ gee_to_s3 <- paste0("Replication_wolf/", gee_local)
 # Send to S3
 map2(gee_local, gee_to_s3 , put_to_s3)
 ```
-```{r}
-#| eval: true
+```{r fetch_gee_output}
+#| eval: false
+
+# fetch from S3 the data gathered from Google Earth Engine
 
 # The code below fetches the output data from a private data lake.
 # naming pattern of files fetched from Google Earth Engine
@@ -203,7 +205,7 @@ replace_all(pattern = "SISID", replacement = "sisid", file = IUCN_data_script)
 Add the required input data
 
 ```{r}
-#| eval: true
+#| eval: false
 
 # Fetch and unzip range maps
 # Range maps are zip encrypted
@@ -227,10 +229,10 @@ Run the script
 
 source(IUCN_data_script)
 ```
-```{r}
+```{r save_IUCN_output}
 #| eval: false
 
-# Save the output data
+# Save the output data to S3
 
 # Species data csv ------------------------------------------------------------
 put_to_s3(from = "data_processed/species_data.csv", 
