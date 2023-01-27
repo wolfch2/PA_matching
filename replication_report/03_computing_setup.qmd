@@ -63,6 +63,9 @@ if (system.file(package = "rnaturalearth") == "") {
 if (system.file(package = "gdalUtils") == "") {
   remotes::install_github("gearslaboratory/gdalUtils")
 } 
+if (system.file(package = "geoarrow") == "") {
+  remotes::install_github("paleolimbot/geoarrow")
+} 
 
 
 # Install from CRAN ------------------------------------------------------------
