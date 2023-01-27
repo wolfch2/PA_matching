@@ -6,35 +6,6 @@ editor_options:
 
 # Reproduction "as is" of the publised results
 
-We want to make all code modifications transparent, so we download a clean version of Wolf et al. source code.
-
-```{r}
-#| eval: false
-# conda create --name replication-wolf --file replication_report/requirements.txt
-# conda activate replication-wolf
-```
-
-
-```{r}
-#| eval: true
-
-setwd("/home/onyxia/work/PA_matching/replication_report")
-# Not a good practice, only for debugging
-# setwd("replication_report")
-# URL pointing to the zip download of the Wolf et al. repository
-repo <- "https://codeload.github.com/wolfch2/PA_matching/zip/refs/heads/master"
-
-# downloads locally
-download.file(repo, destfile = "original.zip", method = "curl")
-# unzips to a containing folder named PA_matching-master (github default)
-unzip("original.zip")
-# original folder will remain intact, we make a copy with required edits to run
-dir.create("PA_matching_asis")
-file.copy(list.files("PA_matching-master", full.names = TRUE), 
-          "PA_matching_asis", overwrite = TRUE)
-file.remove("original.zip")
-```
-
 ## Original source code execution
 
 Some code modifications are required for the code to run. These edits are not intended to test the robustness of the analysis, just for the successful run of the scripts.
@@ -56,76 +27,8 @@ replace_all <- function(pattern, replacement, file) {
 
 The following functions are a series of utilities to save the data to a datalake (based on S3)
 
-```{r}
-#| eval: true
-
-library(tidyverse)
-library(aws.s3)
-
-# Gather secrets required to work with S3 systems
-if (Sys.info()["sysname"] == "Windows") {
-  if (file.exists("secrets_aws.R")) {
-    source("secrets_aws.R")
-  } else { 
-    print(paste0(
-    "You must save your AWS credentials in a local file named secret_aws.R. ",
-    "For more indications see: https://www.book.utilitr.org/",
-    "sspcloud.html#renouveler-des-droits-dacc%C3%A8s-p%C3%A9rim%C3%A9s"))
-  }
-}
-
-# If running on SSP Cloud, getting the key from vault
-if (Sys.info()["effective_user"] == "onyxia") {
-  system("vault kv get -format=table onyxia-kv/fbedecarrats/species_info", 
-         intern = TRUE) -> my_secret 
-  my_key_zip <- my_secret %>%
-    pluck(18) %>%
-    str_extract("[:alnum:]*$")
-  my_key_api <- my_secret %>%
-    pluck(17) %>%
-    str_extract("[:alnum:]*$")
-} else {
- my_secret <- readLines("secret_zip_key")
-}
-
-# A function to put data from local machine to S3
-put_to_s3 <- function(from, to) {
-  aws.s3::put_object(
-    file = from,
-    object = to,
-    bucket = "fbedecarrats",
-    region = "",
-    multipart = TRUE)
-}
-
-# A function to iterate/vectorize copy
-save_from_s3 <- function(from, to) {
-  aws.s3::save_object(
-    object = from,
-    bucket = "fbedecarrats",
-    file = to,
-    overwrite = FALSE,
-    region = "")
-}
-
-# Listing files in bucket
-my_files <- get_bucket_df(bucket = "fbedecarrats",
-                          prefix = "Replication_wolf",
-                          region = "")
-```
-
 We also re-create the file arborescence
 
-
-```{r create_dirs}
-#| eval: false
-
-dir.create("data_input")
-dir.create("data_input/PAs")
-dir.create("temp")
-dir.create("data_processed")
-dir.create("data_processed/rasters")
-```
 
 
 ### Fetch data from Google Earth Engine
@@ -203,23 +106,6 @@ replace_all(pattern = "SISID", replacement = "sisid", file = IUCN_data_script)
 ```
 
 Add the required input data
-
-```{r}
-#| eval: false
-
-# Fetch and unzip range maps
-# Range maps are zip encrypted
-# Secrets are stored in a Vault accessed above
-save_from_s3(from = "Replication_wolf/data_input/range_maps/iucn_species_classes.zip",
-             to = "iucn_species_classes.zip")
-system(paste("unzip -P", my_key_zip, "iucn_species_classes.zip"))
-file.remove("iucn_species_classes.zip")
-
-save_from_s3(from = "Replication_wolf/data_input/range_maps/BOTW.zip",
-             to = "BOTW.zip")
-system(paste("unzip -P", my_key_zip, "BOTW.zip", " -d data_input/range_maps/"))
-file.remove("BOTW.zip")
-```
 
 
 Run the script
@@ -386,38 +272,11 @@ my_wd <- paste0(getwd(), "/")
 replace_all(pattern = "/home/chrisgraywolf/shared/analysis/PA_matching/", 
             replacement = my_wd,
             file = join_script)
-# Replace Science URL that has changed
-old <- "https://science.sciencemag.org/highwire/filestream/715492/field_highwire_adjunct_files/2/aau3445-Data-S3.tif"
-new <- "https://www.science.org/action/downloadSupplement?doi=10.1126%2Fscience.aau3445&file=aau3445-data-s3.tif"
-replace_all(pattern = old,
-            replacement = new,
-            file = join_script)
-# Replace Curtis et al filename: lowercased by Science portal admins
-replace_all(pattern = "data_input/aau3445-Data-S3.tif",
-            replacement = "data_input/aau3445-data-s3.tif",
-            file = join_script)
-# We have not found a way to fetch a previous version of the WDPA database
-# January 2023 is the one we use.
-replace_all(pattern = "WDPA_Jan2020",
-            replacement = "WDPA_Jan2023",
-            file = join_script)
-# Replace url to download WWF data
-old <- "https://c402277.ssl.cf1.rackcdn.com/publications/15/files/original/official_teow.zip\\?1349272619"
-new <- "https://files.worldwildlife.org/wwfcmsprod/files/Publication/file/6kcchn7e3u_official_teow.zip"
-replace_all(pattern = old,
-            replacement = new,
-            file = join_script)
-replace_all(pattern = "data_input/official_teow.zip\\?1349272619",
-            replacement = "data_input/6kcchn7e3u_official_teow.zip",
-            file = join_script)
 
 # Correct the typo in the code
 replace_all(pattern = "PAs_buffer = PA_dists <= 10e3",
             replacement = "PAs_buffer = PAs_dist <= 10e3",
             file = join_script)
-
-# PAs <- geoparquet::read_reoparquet_sf("data_input/PAs/WDPA_Jan2023_poly.parquet")
-# PAs = read_sf("data_input/PAs/WDPA_Jan2023-shapefile-polygons.shp")
 ```
 
 Gather data

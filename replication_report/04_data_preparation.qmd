@@ -6,9 +6,12 @@ editor_options:
 
 # Data gathering and preparation
 
-The replication of this study requires a careful data management. The input data only represents a volume of 16.35 GB (without accounting for the data fetched through IUCN API) and it has to be transformed once or twice before the statistical analysis. First, a folder aborescence must be created before running Wolf et al. source code.
+The replication of this study requires a careful data management. The input data only represents a volume of 16.35 GB (without accounting for the data fetched through IUCN API) and it has to be transformed once or twice before the statistical analysis. First, a folder structure must be created before running Wolf et al. source code.
 
 ```{r create_dirs}
+#| eval: true
+
+# Create arborescence needed for code from Wolf et al. to run
 dir.create("data_input")
 dir.create("data_input/PAs")
 dir.create("data_input/range_maps")
@@ -17,49 +20,193 @@ dir.create("data_processed")
 dir.create("data_processed/rasters")
 ```
 
-## Species data
+## Code updates to fix automatic downloads
 
-The published article mentions that the sources are publicly available, but several sources are not open data, that means that they are not directly downloadable. This refers to three sources :
+Several data sources are automatically fetched when running the source code, but several links and APIs are broken and need updating:
+
+- The country borders are fetched using the package `{rnaturalearth}` but the source API has evolved and the official version of the package is broken. A development version must be installed from Github (see @sec-rsetup) ;
+- The URL for Curtis et al. [-@curtis2018] data from the Science portal is broken and needs to be replaced.
+- The URL for the WWF biome areas also needs to be updated.
+
+The following code performs these modifications.
+
+```{r replace_function}
+#| eval: true
+
+library(tidyverse) # A library bundle to ease data management
+
+# Copy the code from Github ---------------------------------------------------
+setwd("/home/onyxia/work/PA_matching/replication_report")
+# Not a good practice, only for debugging
+# setwd("replication_report")
+# URL pointing to the zip download of the Wolf et al. repository
+repo <- "https://codeload.github.com/wolfch2/PA_matching/zip/refs/heads/master"
+
+# downloads locally
+download.file(repo, destfile = "original.zip", method = "curl")
+# unzips to a containing folder named PA_matching-master (github default)
+unzip("original.zip")
+# original folder will remain intact, we make a copy with required edits to run
+dir.create("PA_matching_asis")
+file.copy(list.files("PA_matching-master", full.names = TRUE), 
+          "PA_matching_asis", overwrite = TRUE)
+file.remove("original.zip")
+
+# A function to replace some parts of the code ---------------------------------
+replace_all <- function(pattern, replacement, file) {
+  readLines(file) %>%
+    str_replace_all(pattern, replacement) %>%
+    writeLines(file)
+}
+
+# Change the source paths ------------------------------------------------------
+# Replace Science URL that has changed
+old <- "https://science.sciencemag.org/highwire/filestream/715492/field_highwire_adjunct_files/2/aau3445-Data-S3.tif"
+new <- "https://www.science.org/action/downloadSupplement?doi=10.1126%2Fscience.aau3445&file=aau3445-data-s3.tif"
+replace_all(pattern = old,
+            replacement = new,
+            file = join_script)
+# Replace Curtis et al filename: lowercased by Science portal admins
+replace_all(pattern = "data_input/aau3445-Data-S3.tif",
+            replacement = "data_input/aau3445-data-s3.tif",
+            file = join_script)
+# Replace url to download WWF data
+old <- "https://c402277.ssl.cf1.rackcdn.com/publications/15/files/original/official_teow.zip\\?1349272619"
+new <- "https://files.worldwildlife.org/wwfcmsprod/files/Publication/file/6kcchn7e3u_official_teow.zip"
+replace_all(pattern = old,
+            replacement = new,
+            file = join_script)
+replace_all(pattern = "data_input/official_teow.zip\\?1349272619",
+            replacement = "data_input/6kcchn7e3u_official_teow.zip",
+            file = join_script)
+```
+
+## Data that needs to be fetched manually before running code
+
+Several sources needs to be collected manually and stored in the file tree to run the code. After manual download stored these data in an encrypted archives on a private S3 storage. We also store the file encryption in a Vault instance.
+
+```{r}
+#| eval: true
+
+library(tidyverse)
+library(aws.s3)
+
+# Gather secrets required to work with S3 systems
+if (Sys.info()["sysname"] == "Windows") {
+  if (file.exists("secrets_aws.R")) {
+    source("secrets_aws.R")
+  } else { 
+    print(paste0(
+    "You must save your AWS credentials in a local file named secret_aws.R. ",
+    "For more indications see: https://www.book.utilitr.org/",
+    "sspcloud.html#renouveler-des-droits-dacc%C3%A8s-p%C3%A9rim%C3%A9s"))
+  }
+}
+
+# If running on SSP Cloud, getting the key from vault
+if (Sys.info()["effective_user"] == "onyxia") {
+  system("vault kv get -format=table onyxia-kv/fbedecarrats/species_info", 
+         intern = TRUE) -> my_secret 
+  my_key_zip <- my_secret %>%
+    pluck(18) %>%
+    str_extract("[:alnum:]*$")
+  my_key_api <- my_secret %>%
+    pluck(17) %>%
+    str_extract("[:alnum:]*$")
+} else {
+ my_secret <- readLines("secret_zip_key")
+}
+
+# A function to put data from local machine to S3
+put_to_s3 <- function(from, to) {
+  aws.s3::put_object(
+    file = from,
+    object = to,
+    bucket = "fbedecarrats",
+    region = "",
+    multipart = TRUE)
+}
+
+# A function to iterate/vectorize copy
+save_from_s3 <- function(from, to) {
+  aws.s3::save_object(
+    object = from,
+    bucket = "fbedecarrats",
+    file = to,
+    overwrite = FALSE,
+    region = "")
+}
+
+# Listing files in bucket
+my_files <- get_bucket_df(bucket = "fbedecarrats",
+                          prefix = "Replication_wolf",
+                          region = "")
+```
+
+### Species data
+
+The published article mentions that the sources are publicly available, but several sources are not in open data, that means that they are not directly downloadable. This refers to three sources :
 
 - the species range maps from IUCN (include mamals, amphibians and reptiles) must be fetched [from the IUCN Spatial data download webpage](https://www.iucnredlist.org/resources/spatial-data-download). They must be unzipped and placed in the folder `data_input/range_maps` ;
 - For the bird species range map from Birds of the world, a query must be submitted via email to BirdLife  with the elements described on [the dedicated webpage](http://datazone.birdlife.org/species/requestdis). The authorization takes about two weeks to be assessed. If/after authorization, the administrators send the user a link to download the data. 
 - It is also required to generate a token from the UICN website and include it in the line 18 of the script `002 - dl_IUCN.R` for it to run successfully.
 
-In our case, we stored the species data in an encrypted archives on a private S3 storage. We also store the file encryption in a Vault instance.
 
-
-
-## Data on protected areas
-
-Protected planet only provides the latest version of the WDPA. We could not figure out how to obtain the versions from previous months or years. Wolf et al. used the January 2020 version, we use the January 2023. The dataset includes the year of obtention of the status, which enables to apply the same temporal filters than the authors (Protected areas created between from 2001 and 2019), but it is possible that information about existing entities have been added, modified or deleted between January 2020 and January 2021.
-
-
-### Add required subfolders
-
-
-
-
-
-
-## Fetch source data
-
-We downloaded the data from protectedplanet.net and placed it in the folder `replication_report/temp`. We then executed the following script to have it in the right format.
-
-get the right WDPA data. Wolf et al. use the data from January 2020.
 
 ```{r}
+# Fetch and unzip species range maps -------------------------------------------
+
+# We stored the range maps in encrypted zip (sensitive data)
+# Secrets are stored in a Vault accessed above
+save_from_s3(from = "Replication_wolf/data_input/range_maps/iucn_species_classes.zip",
+             to = "iucn_species_classes.zip")
+system(paste("unzip -P", my_key_zip, "iucn_species_classes.zip"))
+file.remove("iucn_species_classes.zip")
+
+save_from_s3(from = "Replication_wolf/data_input/range_maps/BOTW.zip",
+             to = "BOTW.zip")
+system(paste("unzip -P", my_key_zip, "BOTW.zip", " -d data_input/range_maps/"))
+file.remove("BOTW.zip")
+
+# Merge reptile files: uncomment to run ----------------------------------------
+
+# # Note that the Reptile species range map comes in 2 parts that need to be
+# # merged. The following code performs this operation
+# 
+# reptiles1 <- st_read("data_input/range_maps/REPTILES_PART1.shp")
+# 
+# reptiles1 %>%
+#   select(-OBJECTID) %>%
+#   st_write(dsn = "data_input/range_maps/REPTILES_PART2.shp", append = TRUE)
+# 
+# file.rename(list.files(path = "data_input/range_maps", 
+#                        pattern ="REPTILES_PART2", full.names = TRUE),
+#             str_replace(list.files(path = "data_input/range_maps",
+#                                    pattern="REPTILES_PART2", 
+#                                    full.names = TRUE),
+#                         pattern="REPTILES_PART2", "REPTILES"))
+```
+
+### Data on protected areas
+
+Protected planet only provides the latest version of the WDPA. We could not figure out how to obtain the versions from previous months or years. Wolf et al. used the January 2020 version, we use the January 2023. The dataset includes the year of creation of the status, which enables to apply the same temporal filters than the authors (Protected areas created between from 2001 and 2019), but it is possible that information about existing entities have been added, modified or deleted between January 2020 and January 2021.
+
+We encountered several obstacles for this operation, that we document below.
+
+We initially tried to obtain it through the package {wdpar}, with the following code. However, when using this method, a column named `GIS_AREA` is not present in the data, while it is used by the script by Wolf et al. performing the matching (`005 - covariate_matching.jl`).
+
+```{r}
+#| eval: false
+
 library(aws.s3)
+library(tidyverse)
+library(wdpar)
+library(sf)
+
 save_from_s3(from = "Replication_wolf/WDPA_Jan2023_Public.gdb.zip",
              to = "data_input/WDPA_Jan2023_Public.gdb.zip")
 save_from_s3(from = "Replication_wolf/data_input/PAs/WDPA_Jan2023_poly.parquet",
              to = "data_input/PAs/WDPA_Jan2023_poly.parquet")
-```
-```{r fetch_wdpa}
-#| eval: !expr from_scratch_mode
-
-library(tidyverse)
-library(wdpar)
-library(sf)
 
 # Get the data from protectedplanet
 if (file.exists("data_input/WDPA_Jan2023_Public.gdb.zip")) {
@@ -91,6 +238,62 @@ wdpa_global %>%
 # WDPA global database.
 ```
 
+We then downloaded the data as zipped shapefiles from [protectedplanet.net](https://www.protectedplanet.net/) and placed it in the folder `replication_report/temp`. We executed the following script to store it in the same format than referred to in Wolf et al. source code. However, the WDPA polygons include some topological errors and the code failed. We finally chose to store the data in geoparquet format, which is more performant and more lenient regarding topological validity.
+
+```{r}
+library(tidyverse)
+library(sf)
+library(aws.s3)
+unzip(zipfile = "temp/WDPA_Jan2023_Public_shp.zip", 
+      exdir = "temp")
+unzip(zipfile = "temp/WDPA_Jan2023_Public_shp_0.zip",
+      exdir = "temp/shp0")
+unzip(zipfile = "temp/WDPA_Jan2023_Public_shp_1.zip",
+      exdir = "temp/shp1")
+unzip(zipfile = "temp/WDPA_Jan2023_Public_shp_2.zip",
+      exdir = "temp/shp2")
+wdpa <- st_read("temp/shp0/WDPA_Jan2023_Public_shp-polygons.shp") %>%
+  bind_rows(st_read("temp/shp1/WDPA_Jan2023_Public_shp-polygons.shp")) %>%
+  bind_rows(st_read("temp/shp2/WDPA_Jan2023_Public_shp-polygons.shp"))
+st_write(obj = wdpa, 
+         dsn = "data_input/PAs/WDPA_Jan2023_Public_shp-polygons.shp")
+
+wdpa2 <- wdpa %>%
+  #"We excluded PAs from our primary analysis that: 
+  #[1] had point (centroid) information only, 
+  # filter(st_geometry_type(.) != "MULTIPOINT") %>% already OK in shapefile
+  #[2] were exclusively marine, 
+  filter(MARINE != "2") %>% #0: 100% terrestrial, 1: both, 2: 100% marine
+  #[3] were established after 2000 since the forest loss data range from 2001 to 2018,
+  filter(STATUS_YR > 2000) %>%
+  #[4] had area less than 1 km2 since forest change in small PAs can be hard to
+  # estimate accurately, 
+  filter(GIS_AREA >= 1)
+
+dir.create("data_input/PAs/v2")
+st_write(obj = wdpa2, 
+         dsn = "data_input/PAs/v2/WDPA_Jan2023_Public_shp-polygons.shp")
+
+dir.create("data_input/PAs/v3")
+remotes::install_github("paleolimbot/geoarrow")
+library(geoarrow)
+write_geoparquet(wdpa2, "data_input/PAs/v3/WDPA_Jan2023_poly.parquet")
+
+put_to_s3(from = "data_input/PAs/v3/WDPA_Jan2023_poly.parquet",
+          to = "Replication_wolf/data_input/PAs/WDPA_Jan2023_poly.parquet")
+
+## TO ADD : script modification new/old
+# PAs <- geoparquet::read_reoparquet_sf("data_input/PAs/WDPA_Jan2023_poly.parquet")
+# PAs = read_sf("data_input/PAs/WDPA_Jan2023-shapefile-polygons.shp")
+```
+
+## Fetch source data
+
+
+get the right WDPA data. Wolf et al. use the data from January 2020.
+
+
+
 ## Prepare data
 
 The data from IUCN now comes in 2 parts for the reptiles.
@@ -101,17 +304,7 @@ The data from IUCN now comes in 2 parts for the reptiles.
 library(tidyverse)
 library(sf)
 
-reptiles1 <- st_read("data_input/range_maps/REPTILES_PART1.shp") 
-  
-reptiles1 %>%
-  select(-OBJECTID) %>%
-  st_write(dsn = "data_input/range_maps/REPTILES_PART2.shp", append = TRUE)
 
-file.rename(list.files(path = "data_input/range_maps", pattern ="REPTILES_PART2",
-                       full.names = TRUE),
-            str_replace(list.files(path = "data_input/range_maps",
-                                   pattern="REPTILES_PART2", full.names = TRUE), 
-                        pattern="REPTILES_PART2", "REPTILES"))
 ```
 
 ## Get pre-processed milestones

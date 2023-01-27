@@ -33,7 +33,7 @@ Have a gmail account to access google services Google Earth Engine and Google Dr
 
 The code requires a working installation of Wget. Wget comes with linux platform and can be installed on MAC. On Windows, it requires Windows Subsystem for Linux.
 
-## Set up R
+## Set up R {#sec-rsetup}
 
 We install all R dependencies that might be required
 
