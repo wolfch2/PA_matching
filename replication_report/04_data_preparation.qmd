@@ -1,3 +1,8 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
 # Data gathering and preparation
 
 ## General setup
@@ -39,56 +44,13 @@ dir.create("data_processed/rasters")
 
 We downloaded the data from protectedplanet.net and placed it in the folder `replication_report/temp`. We then executed the following script to have it in the right format.
 
-```{r}
-library(aws.s3)
-save_from_s3(from = "Replication_wolf/WDPA_Jan2023_Public_shp.zip",
-             to = "temp/WDPA_Jan2023_Public_shp.zip")
-```
-```{r}
-library(tidyverse)
-library(sf)
-library(aws.s3)
-
-
-
-
-unzip(zipfile = "temp/WDPA_Jan2023_Public_shp.zip", 
-      exdir = "temp")
-unzip(zipfile = "temp/WDPA_Jan2023_Public_shp_0.zip",
-      exdir = "temp/shp0")
-unzip(zipfile = "temp/WDPA_Jan2023_Public_shp_1.zip",
-      exdir = "temp/shp1")
-unzip(zipfile = "temp/WDPA_Jan2023_Public_shp_2.zip",
-      exdir = "temp/shp2")
-wdpa <- st_read("temp/shp0/WDPA_Jan2023_Public_shp-polygons.shp") %>%
-  bind_rows(st_read("temp/shp1/WDPA_Jan2023_Public_shp-polygons.shp")) %>%
-  bind_rows(st_read("temp/shp2/WDPA_Jan2023_Public_shp-polygons.shp"))
-
-# Delete files
-file.remove(list.files("temp", recursive = TRUE, 
-                       full.names = TRUE))
-# Delete folders
-list.dirs("temp", recursive = TRUE, full.names = TRUE) %>%
-  str_subset("temp$", negate = TRUE) %>%
-  map(unlink, recursive = TRUE)
-# Write WDPA
-st_write(obj = wdpa, 
-         dsn = "data_input/PAs/WDPA_Jan2023_Public_shp-polygons.shp")
-```
-```{r}
-library(aws.s3)
-my_wdpa_shp <- list.files(path = "data_input/PAs",
-                     pattern = "WDPA_Jan2023",
-                     full.names = TRUE)
-my_wdpa_shp
-my_wdpa_shp_s3 <- paste0("Replication_wolf/", my_wdpa_shp)
-
-map2(my_wdpa_shp, my_wdpa_shp_s3, put_to_s3)
-```
-
-
 get the right WDPA data. Wolf et al. use the data from January 2020.
 
+```{r}
+library(aws.s3)
+save_from_s3(from = "Replication_wolf/WDPA_Jan2023_Public.gdb.zip",
+             to = "data_input/WDPA_Jan2023_Public.gdb.zip")
+```
 ```{r fetch_wdpa}
 #| eval: !expr from_scratch_mode
 
@@ -97,7 +59,12 @@ library(wdpar)
 library(sf)
 
 # Get the data from protectedplanet
-wdpa_global <- wdpa_fetch("global", download_dir = "data_input")
+if (file.exists("data_input/WDPA_Jan2023_Public.gdb.zip")) {
+  wdpa_global <- wdpa_read("data_input/WDPA_Jan2023_Public.gdb.zip")
+} else {
+  wdpa_global <- wdpa_fetch("global", download_dir = "data_input")
+}
+
 # Build a name with same structure than Wolf et al.
 wdpa_file_name <- list.files("data_input", pattern = ".gdb.zip") %>%
   str_remove("_Public.gdb.zip") %>%
