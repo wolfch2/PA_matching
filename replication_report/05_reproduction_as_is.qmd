@@ -415,6 +415,9 @@ replace_all(pattern = "data_input/official_teow.zip\\?1349272619",
 replace_all(pattern = "PAs_buffer = PA_dists <= 10e3",
             replacement = "PAs_buffer = PAs_dist <= 10e3",
             file = join_script)
+
+# PAs <- geoparquet::read_reoparquet_sf("data_input/PAs/WDPA_Jan2023_poly.parquet")
+# PAs = read_sf("data_input/PAs/WDPA_Jan2023-shapefile-polygons.shp")
 ```
 
 Gather data
