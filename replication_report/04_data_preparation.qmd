@@ -3,41 +3,42 @@ output: html_document
 editor_options: 
   chunk_output_type: console
 ---
+
 # Data gathering and preparation
 
-## General setup
-
-A challenge for this replication 
-The analysis mentions that the sources are publicly available, but the data is not available as is: needs an access to Google Earth Engine. The API is not public and this accessibility is conditioned by the will of Google to keep its platform in free access and not to make any evolution in the GEE API that would not be backward compatible. For these resons, it seems recommended to archive the data outputed by sources which reproducibility is not guaranteed.
-
-### Chose mode: `iterative-development` or `from-scratch`
-
-We propose two modes:
-
--   `from-scratch` starts from a clean slates and gathers all the data from the original sources
-
--   `iterative-development` gathers the data produced by previous steps that has been provisionnally stored in a data lake
-
-Some data (such as the protected areas or the ) so they are encrypted and stored in private location accessible only to the replication team. Others who might want to reproduce the analysis must necessarily turn the mode to `from-scratch`.
-
-```{r select_mode}
-# choose between "iterative-development" and "from stratch
-data_mode <- "iterative-development" 
-
-# boolean values from the previous
-iterative_development_mode <- data_mode == "iterative-development"
-from_scratch_mode <- data_mode == "from-scratch"
-```
-
-### Add required subfolders
+The replication of this study requires a careful data management. The input data only represents a volume of 16.35 GB (without accounting for the data fetched through IUCN API) and it has to be transformed once or twice before the statistical analysis. First, a folder aborescence must be created before running Wolf et al. source code.
 
 ```{r create_dirs}
 dir.create("data_input")
 dir.create("data_input/PAs")
+dir.create("data_input/range_maps")
 dir.create("temp")
 dir.create("data_processed")
 dir.create("data_processed/rasters")
 ```
+
+## Species data
+
+The published article mentions that the sources are publicly available, but several sources are not open data, that means that they are not directly downloadable. This refers to three sources :
+
+- the species range maps from IUCN (include mamals, amphibians and reptiles) must be fetched [from the IUCN Spatial data download webpage](https://www.iucnredlist.org/resources/spatial-data-download). They must be unzipped and placed in the folder `data_input/range_maps` ;
+- For the bird species range map from Birds of the world, a query must be submitted via email to BirdLife  with the elements described on [the dedicated webpage](http://datazone.birdlife.org/species/requestdis). The authorization takes about two weeks to be assessed. If/after authorization, the administrators send the user a link to download the data. 
+- It is also required to generate a token from the UICN website and include it in the line 18 of the script `002 - dl_IUCN.R` for it to run successfully.
+
+In our case, we stored the species data in an encrypted archives on a private S3 storage. We also store the file encryption in a Vault instance.
+
+
+
+## Data on protected areas
+
+Protected planet only provides the latest version of the WDPA. We could not figure out how to obtain the versions from previous months or years. Wolf et al. used the January 2020 version, we use the January 2023. The dataset includes the year of obtention of the status, which enables to apply the same temporal filters than the authors (Protected areas created between from 2001 and 2019), but it is possible that information about existing entities have been added, modified or deleted between January 2020 and January 2021.
+
+
+### Add required subfolders
+
+
+
+
 
 
 ## Fetch source data
@@ -50,6 +51,8 @@ get the right WDPA data. Wolf et al. use the data from January 2020.
 library(aws.s3)
 save_from_s3(from = "Replication_wolf/WDPA_Jan2023_Public.gdb.zip",
              to = "data_input/WDPA_Jan2023_Public.gdb.zip")
+save_from_s3(from = "Replication_wolf/data_input/PAs/WDPA_Jan2023_poly.parquet",
+             to = "data_input/PAs/WDPA_Jan2023_poly.parquet")
 ```
 ```{r fetch_wdpa}
 #| eval: !expr from_scratch_mode
