@@ -1,10 +1,5 @@
----
-title: "Pre-analysis plan for the replication of Wolf et al. (2021)"
-author: "Florent Bédécarrats, Marc Bouvier, Marin Ferry, Jeanne de Montalembert"
-format: html
-editor: visual
-bibliography: references.bib
----
+
+## Pre-analysis plan for the replication of Wolf et al. (2021){#sec-preanalysis_plan}
 
 We intend to run a replication of the paper published by Wolf and colleagues in *Nature Ecology & Evolution* in 2021 [@wolf2021]. In this document, we lay out with the analysis steps we plan to carry out before starting any analysis. This has two main objectives:
 

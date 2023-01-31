@@ -9,7 +9,7 @@ book:
   repo-url: https://github.com/fBedecarrats/PA_matching
   chapters:
     - index.qmd
-    - replication_report/01_introduction.qmd
+    # - replication_report/01_introduction.qmd
     - replication_report/02_preanalysis_plan.qmd
     - replication_report/03_computing_setup.qmd
     - replication_report/04_data_preparation.qmd
@@ -24,5 +24,6 @@ format:
     code-fold: true
 
 execute:
+  eval: false
   warning: false
   error: false

@@ -5,37 +5,32 @@ editor_options:
 ---
 # Computing environment setup
 
-The code used by Wolf and colleagues to obtain their results and published on Github mixes three different coding languages: python, R and Julia. Moreover, although the code is generally clearly written and includes some explanatory comments, several adjustments in the code are required to enable it to run on a different machine. This document provides a technical procedure to enable the reproducibility of the computations shared by Wolf and colleagues.
+The source [code published on Github](https://github.com/wolfch2/PA_matching) alongside their article by Wolf and colleagues combines three different coding languages: python, R and Julia. Although the code is generally clearly written and includes some explanatory comments, several adjustments in the code are required to enable it to run on a different machine. This chapter focuses on the configuration (operating system, statistical software and specific libraries) required to run the program. 
 
-## Comments on the reproducibility of the analyses
+## Procedure
 
-Some good practices are not respected. The analysis mentions that the sources are publicly available, but the data is not available as is: needs an access to Google Earth Engine. The API is not public and this accessibility is conditioned by the will of Google to keep its platform in free access and not to make any evolution in the GEE API that would not be backward compatible. For these resons, it seems recommended to archive the data outputed by sources which reproducibility is not guaranteed.
+Guidelines by scientific journals to promote the reproducibility of published scientific articles recommend the authors to publish their code including a file named README that specifies the configuration of the computing environment and the procedure to follow to obtain the same results (for guidance on code publications, see [here for social science journals](https://social-science-data-editors.github.io/guidance/) or [here for Nature journals](https://www.nature.com/articles/d41586-021-02887-8). This source code only includes an empty README file, so we made several attempts to guess a working configuration. We tested the code on the following platforms:
 
-It is also very likely that some data used for the analysis gets updated: UICN species data is regularly updated WDPA data on protected area also
+- A Windows personal computer with 32 Go RAM and a 8 cores processor: the file `001 - dl_GEE.py`successfully ran, but the subsequent code files failed, because they call on Linux commands (e.g. `wget`) or rely on libraries that seem to be unix native.
+- A Linux (Ubuntu 22.04) computer with 8 Go RAM and a 4 cores processor: The code failed to run due to a lack of memory.
+- A Linux pod (Ubuntu 22.04) on a Kubernetes server (Onyxia/SSP Cloud) running a[ Docker image with R and R Studio](https://github.com/InseeFrLab/images-datascience/tree/main/rstudio) on which we install a python distribution (miniconda) with the R package {reticulate} and a 18.5 Julia distribution with the R package {JuliaCall}. The script files `002 - dl_IUCN.R`, `003 - species_richness.py` and `004 - join_rasters.R` run successfully (after several trials and errors and including some corrections in the code, documented in the following chapters). However, the script `005 - covariate_matching.jl` fails to start running, apparently because Julia does not successfully identify dependencies required by the ArchGDAL package (CURL_4), dependencies that are nevertheless present on the system.
+- A Linux pod (Ubuntu 22.04) on a Kubernetes server (Onyxia/SSP Cloud) running a[ Docker image with python and Julia](https://github.com/InseeFrLab/images-datascience/blob/main/r-python-julia/Dockerfile) where we install R and spatial dependenties with Linux `apt` package manager (following [a procedure documented by ThinkR on RTasks](https://rtask.thinkr.fr/installation-of-r-4-2-on-ubuntu-22-04-lts-and-tips-for-spatial-packages/)). The scripts files `002 - dl_IUCN.R`, `003 - species_richness.py` and `004 - join_rasters.R` run succesfully and the script `005 - covariate_matching.jl` starts running, but fails further down in the execution process. Because it happens in parallel processing, the error messages are not meaningful and we need to contact the authors to help us identify the cause of the error.
 
-The obtaining of the data is not documented for BOTW and IUCN range maps.
+Working with Kubernetes pods enables to mobilize large memory and processing resources, and to flexibly adapt the configuration. However, pods must be deleted after use and re-created for each new use, which is time consuming. With the help of Onyxia admin, we are preparing [a docker image that includes R, python and Julia](https://github.com/InseeFrLab/images-datascience/tree/main/r-python-julia) with all the required package. This should make quicker the re-creation process.
 
-## Technical environment
 
-It is possible to combine different programming languages in statistical computing environments such as Jupyter or RMarkdown, or its new generation Quarto. We decided to use Quarto because of its versatility and our familiarity of this tool.
+## Technical environment and prerequisites
 
-Quarto can be obtained at www.quarto.org.
+We document the execution process by including all package installation, code modifications and script execution in a [literate programming](https://en.wikipedia.org/wiki/Literate_programming) format. It is possible to combine different programming languages in litterate programming platforms such as Jupyter or RMarkdown, or its new generation Quarto. We decided to use Quarto because of its versatility and our familiarity of this tool. Quarto can be obtained at www.quarto.org.
 
-Requires Linux or a Windows machine running WSL, otherwise a strong rewriting of some files is needed. We run it on a Windows personal computer.
+The code also requires Linux or a Windows machine running Windows subsystem for Linux, otherwise a substantial rewriting of some scripts is needed. We run it on a Windows personal computer. We have not tried, but it might be possible to run it on Mac as it is similar to Linux in several regards (both are unix systems).
 
-## Prerequisites
-
-### Google services
-
-Have a gmail account to access google services Google Earth Engine and Google Drive.
-
-### wget
-
-The code requires a working installation of Wget. Wget comes with linux platform and can be installed on MAC. On Windows, it requires Windows Subsystem for Linux.
+The first script `001 - dl_GEE.py` requires to have a gmail account to access google services and to registrer on Google Earth Engine.
 
 ## Set up R {#sec-rsetup}
 
-We install all R dependencies that might be required
+The following script installs the R dependies called in the code. We are not certain that all dependencies are effectively used in the script.
+
 
 ```{r install_r_packages}
 
@@ -131,7 +126,10 @@ if(any(missing)) install.packages(required_packages[missing],
 
 ## Set up python
 
+The following scripts install a python distribution (miniconda) with the R package reticulate. It also installs several python packages. Note that several of these packages are not effectively called within the R code. 
+
 ```{r set_up_python}
+
 library(reticulate) # to run python from R
 
 # Variables to modify
@@ -176,7 +174,6 @@ use_condaenv(my_envname)
 ```
 
 ```{r setup_py2}
-#| eval: false
 
 library(reticulate) # to run python from R
 
@@ -223,7 +220,6 @@ if (length(missing_conda) > 0) {
 # Activate the corresponding environment
 use_condaenv(my_envname)
 ```
-```
 
 
 Create an authorization
@@ -255,6 +251,8 @@ gauth.SaveCredentialsFile("mycreds.txt")
 First we install or set-up Julia from R if needed.
 
 ```{r set_up_julia}
+#| eval: false
+
 library(JuliaCall)
 
 if (!dir.exists(paste0(rappdirs::user_data_dir(), "/R/JuliaCall/julia"))) {
@@ -274,23 +272,22 @@ julia_install_package_if_needed("CSV")
 julia_install_package_if_needed("LibGEOS")
 ```
 
-## Harmonize paths
-
-
 ## Adapt to Windows system (optionnal)
 
-The script `002 - dl_IUCN.R` includes a system command that `wget` that refers to a fownloading software that is included in UNIX platforms (Mac and Linux). It is possible however to run it on Windows, if and only the Windows system includs Windows Subsystem for Linux. In that case, if wsl is not already installed the user must first install `parallel` that includes `wget`, runing the command `wsl sudo apt-get update` followed by the command `wsl sudo apt-get install parallel`.
+The script `002 - dl_IUCN.R` includes a system command that `wget` that refers to a fownloading software that is included in UNIX platforms (Mac and Linux). 
 
 On Linux, if `wget` is not available, the user must run the same commands without `wsl`, that is run the command `sudo apt-get update` followed by the command `sudo apt-get install parallel`.
 
 ```{r}
+#| eval: false
+
 if (Sys.info()["sysname"] == "Linux") {
   system("sudo apt update")
   system("sudo apt install -y parallel")
 } 
 ```
 
-
+It is possible however to run it on Windows, if and only the Windows system includs Windows Subsystem for Linux. In that case, if wsl is not already installed the user must first install `parallel` that includes `wget`, runing the command `wsl sudo apt-get update` followed by the command `wsl sudo apt-get install parallel`.
 
 ```{r wget_for_windows}
 #| eval: false
@@ -302,39 +299,3 @@ if (Sys.info()["sysname"] == "Windows") {
 
 ```
 
-## Testing R
-
-```{r simple_test_r}
-1 + 1
-
-```
-
-## Testing python
-
-Needs reticulate (already installed here).
-
-```{python simple_test_python}
-1 + 1
-```
-
-## Testing Julia
-
-```{julia simple_test_julia}
-1 + 1
-```
-
-## Executing 004 - join rasters
-
-\# The call below throws errors messages during execution:
-
-\# Error in x\$.self\$finalize() : attempt to apply non-function
-
-\# According to {raster}
-
-\# https://github.com/rspatial/raster/issues/282
-
-URL for Curtis et al. was: https://science.sciencemag.org/highwire/filestream/715492/field_highwire_adjunct_files/2/aau3445-Data-S3.tif
-
-It is now: https://www.science.org/action/downloadSupplement?doi=10.1126%2Fscience.aau3445&file=aau3445-data-s3.tif
-
-The name of the file has been changed to lowercase: data_input/aau3445-Data-S3.tif becomes aau3445-data-s3.tif

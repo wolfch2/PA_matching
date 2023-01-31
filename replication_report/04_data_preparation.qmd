@@ -9,7 +9,6 @@ editor_options:
 The replication of this study requires a careful data management. The input data only represents a volume of 16.35 GB (without accounting for the data fetched through IUCN API) and it has to be transformed once or twice before the statistical analysis. First, a folder structure must be created before running Wolf et al. source code.
 
 ```{r create_dirs}
-#| eval: true
 
 # Create arborescence needed for code from Wolf et al. to run
 dir.create("data_input")
@@ -31,7 +30,6 @@ Several data sources are automatically fetched when running the source code, but
 The following code performs these modifications.
 
 ```{r replace_function}
-#| eval: true
 
 library(tidyverse) # A library bundle to ease data management
 
@@ -86,7 +84,6 @@ replace_all(pattern = "data_input/official_teow.zip\\?1349272619",
 Several sources needs to be collected manually and stored in the file tree to run the code. After manual download stored these data in an encrypted archives on a private S3 storage. We also store the file encryption in a Vault instance.
 
 ```{r}
-#| eval: true
 
 library(tidyverse)
 library(aws.s3)
@@ -299,7 +296,6 @@ get the right WDPA data. Wolf et al. use the data from January 2020.
 The data from IUCN now comes in 2 parts for the reptiles.
 
 ```{r fix_ui}
-#| eval: !expr from_scratch_mode
 
 library(tidyverse)
 library(sf)
@@ -310,7 +306,6 @@ library(sf)
 ## Get pre-processed milestones
 
 ```{r}
-#| eval: !expr iterative_development_mode
 
 library(dplyr)
 library(stringr)

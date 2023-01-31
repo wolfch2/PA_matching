@@ -13,7 +13,6 @@ Some code modifications are required for the code to run. These edits are not in
 We will use the following function that explicitly declares which modification are made in the source code.
 
 ```{r}
-#| eval: true
 
 library(tidyverse)
 
@@ -36,7 +35,7 @@ We also re-create the file arborescence
 Mofify the paths
 
 ```{r}
-#| eval: true
+
 GEE_data_script <- "PA_matching_asis/001 - dl_GEE.py"
 wolf_path <- "/home/chrisgraywolf/shared/analysis/PA_matching/data_input/"
 my_data_input <- paste0(getwd(), "/data_input/")
@@ -92,7 +91,6 @@ Modify the script to enable it to run on another machine.
 The column names in the official BOTW database are now in lowercase. It was apparently in uppercase when Wolf et al. processed the data. We need to modify the reference to one column name in the script for it to run. 
 
 ```{r}
-#| eval: true
 
 IUCN_data_script <- "PA_matching_asis/002 - dl_IUCN.R"
 my_wd <- paste0(getwd(), "/")
@@ -143,7 +141,6 @@ put_to_s3(from = "data_processed/rasters/elev.tif",
           to = "Replication_wolf/data_processed/rasters/elev.tif")
 ```
 ```{r}
-#| eval: true
 
 # Load the data 
 save_from_s3(from = "Replication_wolf/data_processed/species_data.csv",
@@ -170,7 +167,6 @@ The ray package is designed to work with some virtual memory that is not present
 We also need to modify the following command `richness = results[0]`, as it correspond to a method to assign an array that is not allowed in recent numpy versions and returns an error. We therefore add `.copy()` to this command, to have `richness = results[0].copy()`, which now correspond to the correct way of proceeding with this operation in python.
 
 ```{r}
-#| eval: true
 
 # Set target
 species_richness_script <- "PA_matching_asis/003 - species_richness.py"
@@ -232,7 +228,6 @@ put_to_s3(from = "data_processed/threatened.tif",
           to = "Replication_wolf/data_processed/threatened.tif")
 ```
 ```{r}
-#| eval: true
 
 # Fetch outputs
 # Save outputs
@@ -264,7 +259,6 @@ There is a typo on line 136: an object called `PA_dists` is called but no object
 
 
 ```{r}
-#| eval: true
 
 join_script <- "PA_matching_asis/004 - join_rasters.R"
 my_wd <- paste0(getwd(), "/")
@@ -282,7 +276,6 @@ replace_all(pattern = "PAs_buffer = PA_dists <= 10e3",
 Gather data
 
 ```{r}
-#| eval: true
 
 # Listing files in bucket
 my_files <- get_bucket_df(bucket = "fbedecarrats",
@@ -320,7 +313,6 @@ source(join_script)
 Save outputs
 
 ```{r save_join_raster_output}
-#| eval: false
 
 # Save outputs
 # List present tifs
@@ -344,7 +336,6 @@ path_in_s3 <- paste0("Replication_wolf/", to_put_s3)
 map2(to_put_s3, path_in_s3, put_to_s3)
 ```
 ```{r fetch_join_raster_output}
-#| eval: true
 
 # Listing files in bucket
 my_files <- get_bucket_df(bucket = "fbedecarrats",
